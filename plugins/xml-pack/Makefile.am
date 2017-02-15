@@ -15,10 +15,19 @@ libxml_pack_plugin_la_SOURCES =              \
 	ide-xml-highlighter.h                \
 	ide-xml-indenter.c                   \
 	ide-xml-indenter.h                   \
+	ide-xml-parser.c                     \
+	ide-xml-parser.h                     \
+	ide-xml-parser-private.h             \
+	ide-xml-parser-generic.c             \
+	ide-xml-parser-generic.h             \
+	ide-xml-parser-ui.c                  \
+	ide-xml-parser-ui.h                  \
 	ide-xml-sax.c                        \
 	ide-xml-sax.h                        \
 	ide-xml-service.c                    \
 	ide-xml-service.h                    \
+	ide-xml-schema-cache-entry.c         \
+	ide-xml-schema-cache-entry.h         \
 	ide-xml-stack.c                      \
 	ide-xml-stack.h                      \
 	ide-xml-symbol-node.c                \
@@ -29,12 +38,10 @@ libxml_pack_plugin_la_SOURCES =              \
 	ide-xml-symbol-tree.h                \
 	ide-xml-tree-builder.c               \
 	ide-xml-tree-builder.h               \
-	ide-xml-tree-builder-generic.c       \
-	ide-xml-tree-builder-generic.h       \
-	ide-xml-tree-builder-ui.c            \
-	ide-xml-tree-builder-ui.h            \
 	ide-xml-tree-builder-utils.c         \
 	ide-xml-tree-builder-utils-private.h \
+	ide-xml-validator.c                  \
+	ide-xml-validator.h                  \
 	ide-xml.c                            \
 	ide-xml.h                            \
 	xml-pack-plugin.c                    \
