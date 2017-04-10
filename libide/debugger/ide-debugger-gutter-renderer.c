@@ -156,7 +156,7 @@ ide_debugger_gutter_renderer_breakpoints_changed (IdeDebuggerGutterRenderer *sel
   gtk_source_gutter_renderer_queue_draw (GTK_SOURCE_GUTTER_RENDERER (self));
 }
 
-static void
+void
 ide_debugger_gutter_renderer_set_breakpoints (IdeDebuggerGutterRenderer *self,
                                               IdeDebuggerBreakpoints    *breakpoints)
 {

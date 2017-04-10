@@ -20,7 +20,8 @@
 #define IDE_DEBUGGER_GUTTER_RENDERER_H
 
 #include <gtksourceview/gtksource.h>
-#include <ide.h>
+
+#include "ide-types.h"
 
 G_BEGIN_DECLS
 
@@ -28,7 +29,9 @@ G_BEGIN_DECLS
 
 G_DECLARE_FINAL_TYPE (IdeDebuggerGutterRenderer, ide_debugger_gutter_renderer, IDE, DEBUGGER_GUTTER_RENDERER, GtkSourceGutterRendererPixbuf)
 
-GtkSourceGutterRenderer *ide_debugger_gutter_renderer_new (void);
+GtkSourceGutterRenderer *ide_debugger_gutter_renderer_new             (void);
+void                     ide_debugger_gutter_renderer_set_breakpoints (IdeDebuggerGutterRenderer *self,
+                                                                       IdeDebuggerBreakpoints    *breakpoints);
 
 G_END_DECLS
 
