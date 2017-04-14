@@ -23,6 +23,7 @@
 
 #include "ide-debug.h"
 
+#include "buffers/ide-buffer.h"
 #include "debugger/ide-debugger.h"
 #include "debugger/ide-debugger-perspective.h"
 #include "debugger/ide-debugger-view.h"
@@ -32,7 +33,7 @@
 
 struct _IdeDebuggerPerspective
 {
-  IdeLayout       parent_instance;
+  PnlDockBin      parent_instance;
 
   IdeDebugger    *debugger;
   EggSignalGroup *debugger_signals;
@@ -83,7 +84,7 @@ perspective_iface_init (IdePerspectiveInterface *iface)
   iface->get_title = ide_debugger_perspective_get_title;
 }
 
-G_DEFINE_TYPE_EXTENDED (IdeDebuggerPerspective, ide_debugger_perspective, IDE_TYPE_LAYOUT, 0,
+G_DEFINE_TYPE_EXTENDED (IdeDebuggerPerspective, ide_debugger_perspective, PNL_TYPE_DOCK_BIN, 0,
                         G_IMPLEMENT_INTERFACE (IDE_TYPE_PERSPECTIVE, perspective_iface_init))
 
 static GParamSpec *properties [N_PROPS];
@@ -293,7 +294,7 @@ ide_debugger_perspective_load_source_cb (GObject      *object,
 {
   IdeDebugger *debugger = (IdeDebugger *)object;
   g_autoptr(IdeDebuggerPerspective) self = user_data;
-  g_autoptr(GtkSourceBuffer) buffer = NULL;
+  g_autoptr(IdeBuffer) buffer = NULL;
   g_autoptr(GError) error = NULL;
   IdeLayoutView *view;
   GtkWidget *stack;

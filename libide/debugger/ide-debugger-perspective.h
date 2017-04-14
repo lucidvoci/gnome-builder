@@ -26,7 +26,7 @@ G_BEGIN_DECLS
 
 #define IDE_TYPE_DEBUGGER_PERSPECTIVE (ide_debugger_perspective_get_type())
 
-G_DECLARE_FINAL_TYPE (IdeDebuggerPerspective, ide_debugger_perspective, IDE, DEBUGGER_PERSPECTIVE, IdeLayout)
+G_DECLARE_FINAL_TYPE (IdeDebuggerPerspective, ide_debugger_perspective, IDE, DEBUGGER_PERSPECTIVE, PnlDockBin)
 
 void ide_debugger_perspective_set_debugger           (IdeDebuggerPerspective *self,
                                                       IdeDebugger            *debugger);
