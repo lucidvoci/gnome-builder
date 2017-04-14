@@ -54,9 +54,13 @@ libide_1_0_la_public_headers =                                              \
 	debugger/ide-debug-manager.h                                        \
 	debugger/ide-debugger-breakpoints.h                                 \
 	debugger/ide-debugger-editor-view-addin.h                           \
+	debugger/ide-debugger-frame.h                                       \
 	debugger/ide-debugger-perspective.h                                 \
 	debugger/ide-debugger-workbench-addin.h                             \
 	debugger/ide-debugger-gutter-renderer.h                             \
+	debugger/ide-debugger-stack.h                                       \
+	debugger/ide-debugger-thread.h                                      \
+	debugger/ide-debugger-variable.h                                    \
 	debugger/ide-debugger-view.h                                        \
 	devices/ide-device-manager.h                                        \
 	devices/ide-device-provider.h                                       \
@@ -245,9 +249,13 @@ libide_1_0_la_public_sources =                                              \
 	debugger/ide-debug-manager.c                                        \
 	debugger/ide-debugger-breakpoints.c                                 \
 	debugger/ide-debugger-editor-view-addin.c                           \
+	debugger/ide-debugger-frame.c                                       \
 	debugger/ide-debugger-perspective.c                                 \
 	debugger/ide-debugger-workbench-addin.c                             \
 	debugger/ide-debugger-gutter-renderer.c                             \
+	debugger/ide-debugger-stack.c                                       \
+	debugger/ide-debugger-thread.c                                      \
+	debugger/ide-debugger-variable.c                                    \
 	debugger/ide-debugger-view.c                                        \
 	devices/ide-device-manager.c                                        \
 	devices/ide-device-provider.c                                       \
