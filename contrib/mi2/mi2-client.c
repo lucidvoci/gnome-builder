@@ -957,6 +957,114 @@ mi2_client_run_finish (Mi2Client     *self,
 }
 
 /**
+ * mi2_client_step_async:
+ * @self: a #Mi2Client
+ * @cancellable: (nullable): an optional #GCancellable, or %NULL
+ * @callback: (scope async) (closure user_data): a callback to execute
+ * @user_data: user data for @callback
+ *
+ * Asynchronously executes the continue command.
+ *
+ * Call mi2_client_step_finish() from @callback to get the result.
+ */
+void
+mi2_client_step_async (Mi2Client           *self,
+                       gboolean             reverse,
+                       GCancellable        *cancellable,
+                       GAsyncReadyCallback  callback,
+                       gpointer             user_data)
+{
+  g_autoptr(GTask) task = NULL;
+
+  g_return_if_fail (MI2_IS_CLIENT (self));
+  g_return_if_fail (!cancellable || G_IS_CANCELLABLE (cancellable));
+
+  task = g_task_new (self, cancellable, callback, user_data);
+  g_task_set_source_tag (task, mi2_client_step_async);
+
+  mi2_client_exec_async (self,
+                         reverse ? "-exec-step --reverse" : "-exec-step",
+                         cancellable,
+                         mi2_client_exec_cb,
+                         g_steal_pointer (&task));
+}
+
+/**
+ * mi2_client_step_finish:
+ * @self: a #Mi2Client
+ * @result: the #GAsyncResult provided to the callback function
+ * @error: a location for a #GError, or %NULL
+ *
+ * Completes an asynchronous request to mi2_client_step_async().
+ *
+ * Returns: %TRUE if successful, otherwise %FALSE and @error is est.
+ */
+gboolean
+mi2_client_step_finish (Mi2Client     *self,
+                        GAsyncResult  *result,
+                        GError       **error)
+{
+  g_return_val_if_fail (MI2_IS_CLIENT (self), FALSE);
+  g_return_val_if_fail (G_IS_TASK (result), FALSE);
+
+  return g_task_propagate_boolean (G_TASK (result), error);
+}
+
+/**
+ * mi2_client_next_async:
+ * @self: a #Mi2Client
+ * @cancellable: (nullable): an optional #GCancellable, or %NULL
+ * @callback: (scope async) (closure user_data): a callback to execute
+ * @user_data: user data for @callback
+ *
+ * Asynchronously executes the continue command.
+ *
+ * Call mi2_client_next_finish() from @callback to get the result.
+ */
+void
+mi2_client_next_async (Mi2Client           *self,
+                       gboolean             reverse,
+                       GCancellable        *cancellable,
+                       GAsyncReadyCallback  callback,
+                       gpointer             user_data)
+{
+  g_autoptr(GTask) task = NULL;
+
+  g_return_if_fail (MI2_IS_CLIENT (self));
+  g_return_if_fail (!cancellable || G_IS_CANCELLABLE (cancellable));
+
+  task = g_task_new (self, cancellable, callback, user_data);
+  g_task_set_source_tag (task, mi2_client_next_async);
+
+  mi2_client_exec_async (self,
+                         reverse ? "-exec-next --reverse" : "-exec-next",
+                         cancellable,
+                         mi2_client_exec_cb,
+                         g_steal_pointer (&task));
+}
+
+/**
+ * mi2_client_next_finish:
+ * @self: a #Mi2Client
+ * @result: the #GAsyncResult provided to the callback function
+ * @error: a location for a #GError, or %NULL
+ *
+ * Completes an asynchronous request to mi2_client_next_async().
+ *
+ * Returns: %TRUE if successful, otherwise %FALSE and @error is est.
+ */
+gboolean
+mi2_client_next_finish (Mi2Client     *self,
+                        GAsyncResult  *result,
+                        GError       **error)
+{
+  g_return_val_if_fail (MI2_IS_CLIENT (self), FALSE);
+  g_return_val_if_fail (G_IS_TASK (result), FALSE);
+
+  return g_task_propagate_boolean (G_TASK (result), error);
+}
+
+/**
  * mi2_client_continue_async:
  * @self: a #Mi2Client
  * @cancellable: (nullable): an optional #GCancellable, or %NULL
@@ -1047,6 +1155,7 @@ mi2_stop_reason_get_type (void)
       GType _type_id;
       static const GEnumValue values[] = {
         { MI2_STOP_UNKNOWN, "MI2_STOP_UNKNOWN", "unknown" },
+        { MI2_STOP_END_STEPPING_RANGE, "MI2_STOP_END_STEPPING_RANGE", "end-stepping-range" },
         { MI2_STOP_EXITED_NORMALLY, "MI2_STOP_EXITED_NORMALLY", "exited-normally" },
         { MI2_STOP_BREAKPOINT_HIT, "MI2_STOP_BREAKPOINT_HIT", "breakpoint-hit" },
         { 0 }

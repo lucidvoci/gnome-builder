@@ -183,9 +183,11 @@ gbp_gdb_debugger_run (IdeDebugger        *debugger,
   switch (run_type)
     {
     case IDE_DEBUGGER_RUN_STEP_IN:
+      mi2_client_next_async (self->client, FALSE, NULL, NULL, NULL);
       break;
 
     case IDE_DEBUGGER_RUN_STEP_OVER:
+      mi2_client_step_async (self->client, FALSE, NULL, NULL, NULL);
       break;
 
     case IDE_DEBUGGER_RUN_CONTINUE:
@@ -340,6 +342,7 @@ gbp_gdb_debugger_on_client_stopped (GbpGdbDebugger  *self,
   switch (reason)
     {
     case MI2_STOP_BREAKPOINT_HIT:
+    case MI2_STOP_END_STEPPING_RANGE:
       self->can_continue = TRUE;
       self->can_step_in = TRUE;
       self->can_step_over = TRUE;

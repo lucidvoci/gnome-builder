@@ -91,7 +91,7 @@ ide_debugger_real_load_source_cb (GObject      *object,
 
   gtk_text_buffer_get_iter_at_line_offset (GTK_TEXT_BUFFER (buffer),
                                            &iter,
-                                           line,
+                                           line - 1,
                                            line_offset);
 
   gtk_text_buffer_select_range (GTK_TEXT_BUFFER (buffer), &iter, &iter);

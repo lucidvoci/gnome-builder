@@ -36,6 +36,7 @@ G_DECLARE_DERIVABLE_TYPE (Mi2Client, mi2_client, MI2, CLIENT, GObject)
 typedef enum
 {
   MI2_STOP_UNKNOWN,
+  MI2_STOP_END_STEPPING_RANGE,
   MI2_STOP_EXITED_NORMALLY,
   MI2_STOP_BREAKPOINT_HIT,
 } Mi2StopReason;
@@ -98,6 +99,22 @@ void           mi2_client_shutdown_async                  (Mi2Client            
                                                            GAsyncReadyCallback   callback,
                                                            gpointer              user_data);
 gboolean       mi2_client_shutdown_finish                 (Mi2Client            *self,
+                                                           GAsyncResult         *result,
+                                                           GError              **error);
+void           mi2_client_step_async                      (Mi2Client            *self,
+                                                           gboolean              reverse,
+                                                           GCancellable         *cancellable,
+                                                           GAsyncReadyCallback   callback,
+                                                           gpointer              user_data);
+gboolean       mi2_client_step_finish                     (Mi2Client            *self,
+                                                           GAsyncResult         *result,
+                                                           GError              **error);
+void           mi2_client_next_async                      (Mi2Client            *self,
+                                                           gboolean              reverse,
+                                                           GCancellable         *cancellable,
+                                                           GAsyncReadyCallback   callback,
+                                                           gpointer              user_data);
+gboolean       mi2_client_next_finish                     (Mi2Client            *self,
                                                            GAsyncResult         *result,
                                                            GError              **error);
 void           mi2_client_continue_async                  (Mi2Client            *self,
