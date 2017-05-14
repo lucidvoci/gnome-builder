@@ -44,6 +44,7 @@ libxml_pack_plugin_la_SOURCES =              \
 	ide-xml-tree-builder.h               \
 	ide-xml-tree-builder-utils.c         \
 	ide-xml-tree-builder-utils-private.h \
+	ide-xml-types.h                      \
 	ide-xml-validator.c                  \
 	ide-xml-validator.h                  \
 	ide-xml.c                            \
