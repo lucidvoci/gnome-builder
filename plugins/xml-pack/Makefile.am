@@ -36,6 +36,8 @@ libxml_pack_plugin_la_SOURCES =              \
 	ide-xml-sax.h                        \
 	ide-xml-service.c                    \
 	ide-xml-service.h                    \
+	ide-xml-schema.c                     \
+	ide-xml-schema.h                     \
 	ide-xml-schema-cache-entry.c         \
 	ide-xml-schema-cache-entry.h         \
 	ide-xml-stack.c                      \
