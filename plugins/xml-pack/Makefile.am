@@ -26,6 +26,8 @@ libxml_pack_plugin_la_SOURCES =              \
 	ide-xml-parser-generic.h             \
 	ide-xml-parser-ui.c                  \
 	ide-xml-parser-ui.h                  \
+	ide-xml-path.c                       \
+	ide-xml-path.h                       \
 	ide-xml-position.c                   \
 	ide-xml-position.h                   \
 	ide-xml-rng-define.c                 \
