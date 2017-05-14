@@ -30,6 +30,8 @@ libxml_pack_plugin_la_SOURCES =              \
 	ide-xml-position.h                   \
 	ide-xml-rng-define.c                 \
 	ide-xml-rng-define.h                 \
+	ide-xml-rng-grammar.c                \
+	ide-xml-rng-grammar.h                \
 	ide-xml-sax.c                        \
 	ide-xml-sax.h                        \
 	ide-xml-service.c                    \
