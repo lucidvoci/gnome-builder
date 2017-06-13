@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
   <!-- interface-requires gtk+ 3.16 -->
-  <template class="SymbolTreePanel" parent="PnlDockWidget">
+  <template class="SymbolTreePanel" parent="DzlDockWidget">
     <property name="vexpand">true</property>
     <property name="visible">true</property>
     <child>
@@ -17,7 +17,7 @@
           <object class="GtkStack" id="stack">
             <property name="visible">true</property>
             <child>
-              <object class="EggEmptyState">
+              <object class="DzlEmptyState">
                 <property name="border-width">12</property>
                 <property name="margin-top">12</property>
                 <property name="pixel-size">64</property>
@@ -36,7 +36,7 @@
                 <property name="expand">true</property>
                 <property name="visible">true</property>
                 <child>
-                  <object class="IdeTree" id="tree">
+                  <object class="DzlTree" id="tree">
                     <property name="activate-on-single-click">true</property>
                     <property name="headers-visible">false</property>
                     <property name="show-icons">true</property>

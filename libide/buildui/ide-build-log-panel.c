@@ -18,12 +18,9 @@
 
 #define G_LOG_DOMAIN "ide-build-log-panel"
 
+#include <dazzle.h>
 #include <glib/gi18n.h>
 #include <ide.h>
-
-#include "util/ide-pango.h"
-
-#include "egg-signal-group.h"
 
 #include "ide-build-log-panel.h"
 
@@ -42,7 +39,7 @@ typedef struct _ColorCodeState
 
 struct _IdeBuildLogPanel
 {
-  PnlDockWidget      parent_instance;
+  DzlDockWidget      parent_instance;
 
   IdeBuildPipeline  *pipeline;
   GtkCssProvider    *css;
@@ -69,7 +66,7 @@ enum {
   LAST_PROP
 };
 
-G_DEFINE_TYPE (IdeBuildLogPanel, ide_build_log_panel, PNL_TYPE_DOCK_WIDGET)
+G_DEFINE_TYPE (IdeBuildLogPanel, ide_build_log_panel, DZL_TYPE_DOCK_WIDGET)
 
 static GParamSpec *properties [LAST_PROP];
 
@@ -603,7 +600,7 @@ ide_build_log_panel_changed_font_name (IdeBuildLogPanel *self,
       gchar *fragment;
       gchar *css;
 
-      fragment = ide_pango_font_description_to_css (font_desc);
+      fragment = dzl_pango_font_description_to_css (font_desc);
       css = g_strdup_printf ("textview { %s }", fragment);
 
       gtk_css_provider_load_from_data (self->css, css, -1, NULL);

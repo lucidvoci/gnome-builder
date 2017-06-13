@@ -27,13 +27,13 @@
 
 struct _GbpDevhelpPanel
 {
-  PnlDockWidget  parent_instance;
+  DzlDockWidget  parent_instance;
 
   DhBookManager *books;
   DhSidebar     *sidebar;
 };
 
-G_DEFINE_TYPE (GbpDevhelpPanel, gbp_devhelp_panel, PNL_TYPE_DOCK_WIDGET)
+G_DEFINE_TYPE (GbpDevhelpPanel, gbp_devhelp_panel, DZL_TYPE_DOCK_WIDGET)
 
 enum {
   PROP_0,
@@ -120,7 +120,7 @@ gbp_devhelp_panel_constructed (GObject *object)
 
   self->sidebar = DH_SIDEBAR (dh_sidebar_new (self->books));
 
-  entry = ide_widget_find_child_typed (GTK_WIDGET (self->sidebar), GTK_TYPE_ENTRY);
+  entry = dzl_gtk_widget_find_child_typed (GTK_WIDGET (self->sidebar), GTK_TYPE_ENTRY);
   if (entry != NULL)
     {
       g_object_set (entry, "margin", 0, NULL);

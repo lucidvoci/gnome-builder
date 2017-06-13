@@ -62,6 +62,8 @@ def DBusMethod(dbus_interface, in_signature=None, out_signature=None, async=Fals
         return func
     return decorator
 
+Ide.DBusMethod = DBusMethod
+
 class DBusService:
     class _DBusInfo:
         object_path = None
@@ -132,7 +134,7 @@ class DBusService:
         try:
             info = self.__dbus_info.methods[iface_name][method_name]
         except KeyError:
-            invocation.return_error_literal(Gio.dbus_error_quark(), 
+            invocation.return_error_literal(Gio.dbus_error_quark(),
                                             Gio.DBusError.UNKNOWN_METHOD,
                                             'No such interface or method: %s.%s' % (iface_name, method_name))
             return
@@ -145,7 +147,7 @@ class DBusService:
                 ret = func(*parameters.unpack())
                 invocation.return_value(GLib.Variant('(' + info['out_signature'] + ')', (ret,)))
         except Exception as e:
-            invocation.return_error_literal(Gio.dbus_error_quark(), 
+            invocation.return_error_literal(Gio.dbus_error_quark(),
                                             Gio.DBusError.IO_ERROR,
                                             'Method %s.%s failed with: %s' % (iface_name, method_name, str(e)))
 
@@ -157,9 +159,45 @@ class DBusService:
         error = GLib.Error.new_literal(GLib.io_channel_error_quark(), 1, 'Not implemented yet')
         return False
 
+Ide.DBusService = DBusService
+
 def NotSupportedError():
     return GLib.Error.new_literal(Gio.io_error_quark(), 'not supported', Gio.IOErrorEnum.NOT_SUPPORTED)
 
 Ide.NotSupportedError = NotSupportedError
-Ide.DBusService = DBusService
-Ide.DBusMethod = DBusMethod
+
+#
+# GLib logging wrappers
+#
+
+def _modname():
+    import inspect
+    frm = inspect.stack()[2]
+    mod = inspect.getmodule(frm[0])
+    return mod.__name__
+
+def _log(domain, level, *messages):
+    message = ' '.join(messages)
+    v = GLib.Variant('a{sv}', {'MESSAGE': GLib.Variant.new_string(message)})
+    GLib.log_variant(domain, level, v)
+
+def critical(*messages):
+    _log(_modname(), GLib.LogLevelFlags.LEVEL_CRITICAL, *messages)
+
+def warning(*messages):
+    _log(_modname(), GLib.LogLevelFlags.LEVEL_WARNING, *messages)
+
+def debug(*messages):
+    _log(_modname(), GLib.LogLevelFlags.LEVEL_DEBUG, *messages)
+
+def message(*messages):
+    _log(_modname(), GLib.LogLevelFlags.LEVEL_MESSAGE, *messages)
+
+def info(*messages):
+    _log(_modname(), GLib.LogLevelFlags.LEVEL_INFO, *messages)
+
+Ide.critical = critical
+Ide.debug = debug
+Ide.info = info
+Ide.message = message
+Ide.warning = warning

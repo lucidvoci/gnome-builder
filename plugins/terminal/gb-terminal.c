@@ -16,10 +16,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <dazzle.h>
 #include <glib/gi18n.h>
 #include <ide.h>
-
-#include "egg-widget-action-group.h"
 
 #include "gb-terminal.h"
 
@@ -110,15 +109,15 @@ popup_targets_received (GtkClipboard     *clipboard,
 
       terminal->url  = vte_terminal_match_check_event (VTE_TERMINAL (terminal), (GdkEvent *)popup_info->event, NULL);
 
-      menu = ide_application_get_menu_by_id (IDE_APPLICATION_DEFAULT, "gb-terminal-view-popup-menu");
+      menu = dzl_application_get_menu_by_id (DZL_APPLICATION_DEFAULT, "gb-terminal-view-popup-menu");
       terminal->popup_menu = gtk_menu_new_from_model (G_MENU_MODEL (menu));
 
       group = gtk_widget_get_action_group (GTK_WIDGET (terminal), "terminal");
 
-      egg_widget_action_group_set_action_enabled (EGG_WIDGET_ACTION_GROUP (group), "copy-link-address", !(terminal->url == NULL));
-      egg_widget_action_group_set_action_enabled (EGG_WIDGET_ACTION_GROUP (group), "open-link", !(terminal->url == NULL));
-      egg_widget_action_group_set_action_enabled (EGG_WIDGET_ACTION_GROUP (group), "copy-clipboard", have_selection);
-      egg_widget_action_group_set_action_enabled (EGG_WIDGET_ACTION_GROUP (group), "paste-clipboard", clipboard_contains_text);
+      dzl_widget_action_group_set_action_enabled (DZL_WIDGET_ACTION_GROUP (group), "copy-link-address", !(terminal->url == NULL));
+      dzl_widget_action_group_set_action_enabled (DZL_WIDGET_ACTION_GROUP (group), "open-link", !(terminal->url == NULL));
+      dzl_widget_action_group_set_action_enabled (DZL_WIDGET_ACTION_GROUP (group), "copy-clipboard", have_selection);
+      dzl_widget_action_group_set_action_enabled (DZL_WIDGET_ACTION_GROUP (group), "paste-clipboard", clipboard_contains_text);
 
       gtk_style_context_add_class (gtk_widget_get_style_context (terminal->popup_menu), GTK_STYLE_CLASS_CONTEXT_MENU);
       gtk_menu_attach_to_widget (GTK_MENU (terminal->popup_menu), GTK_WIDGET (terminal), popup_menu_detach);
@@ -265,7 +264,7 @@ gb_terminal_real_search_reveal (GbTerminal *self)
 
   if (parent_overlay != NULL)
     {
-      GtkRevealer *revealer = ide_widget_find_child_typed (parent_overlay, GTK_TYPE_REVEALER);
+      GtkRevealer *revealer = dzl_gtk_widget_find_child_typed (parent_overlay, GTK_TYPE_REVEALER);
 
       if (revealer != NULL && !gtk_revealer_get_child_revealed (revealer))
         gtk_revealer_set_reveal_child (revealer, TRUE);
@@ -357,7 +356,7 @@ gb_terminal_class_init (GbTerminalClass *klass)
 static void
 gb_terminal_init (GbTerminal *self)
 {
-  egg_widget_action_group_attach (self, "terminal");
+  dzl_widget_action_group_attach (self, "terminal");
 
   for (guint i = 0; url_regexes[i]; i++)
     {

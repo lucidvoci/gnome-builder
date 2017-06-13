@@ -16,17 +16,17 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <realtime-graphs.h>
+#include <dazzle.h>
 
 #include "gb-sysmon-panel.h"
 
 struct _GbSysmonPanel
 {
-  PnlDockWidget  parent_instance;
-  RgCpuGraph    *cpu_graph;
+  DzlDockWidget  parent_instance;
+  DzlCpuGraph   *cpu_graph;
 };
 
-G_DEFINE_TYPE (GbSysmonPanel, gb_sysmon_panel, PNL_TYPE_DOCK_WIDGET)
+G_DEFINE_TYPE (GbSysmonPanel, gb_sysmon_panel, DZL_TYPE_DOCK_WIDGET)
 
 static void
 gb_sysmon_panel_finalize (GObject *object)
@@ -45,7 +45,7 @@ gb_sysmon_panel_class_init (GbSysmonPanelClass *klass)
   gtk_widget_class_set_template_from_resource (widget_class, "/org/gnome/builder/plugins/sysmon/gb-sysmon-panel.ui");
   gtk_widget_class_bind_template_child (widget_class, GbSysmonPanel, cpu_graph);
 
-  g_type_ensure (RG_TYPE_CPU_GRAPH);
+  g_type_ensure (DZL_TYPE_CPU_GRAPH);
 }
 
 static void

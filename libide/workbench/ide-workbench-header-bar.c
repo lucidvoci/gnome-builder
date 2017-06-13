@@ -18,10 +18,10 @@
 
 #define G_LOG_DOMAIN "ide-workbench-header-bar"
 
-#include <egg-priority-box.h>
+#include <dazzle.h>
 
 #include "application/ide-application.h"
-#include "search/ide-omni-search-entry.h"
+#include "search/ide-search-entry.h"
 #include "util/ide-gtk.h"
 #include "workbench/ide-perspective.h"
 #include "workbench/ide-workbench.h"
@@ -29,11 +29,11 @@
 
 typedef struct
 {
-  GtkMenuButton      *menu_button;
-  EggPriorityBox     *right_box;
-  EggPriorityBox     *left_box;
-  IdeOmniBar         *omni_bar;
-  IdeOmniSearchEntry *search_entry;
+  GtkMenuButton   *menu_button;
+  DzlPriorityBox  *right_box;
+  DzlPriorityBox  *left_box;
+  IdeOmniBar      *omni_bar;
+  IdeSearchEntry  *search_entry;
 } IdeWorkbenchHeaderBarPrivate;
 
 static void buildable_iface_init (GtkBuildableIface *iface);
@@ -59,6 +59,8 @@ ide_workbench_header_bar_class_init (IdeWorkbenchHeaderBarClass *klass)
   gtk_widget_class_bind_template_child_private (widget_class, IdeWorkbenchHeaderBar, omni_bar);
   gtk_widget_class_bind_template_child_private (widget_class, IdeWorkbenchHeaderBar, right_box);
   gtk_widget_class_bind_template_child_private (widget_class, IdeWorkbenchHeaderBar, search_entry);
+
+  g_type_ensure (IDE_TYPE_SEARCH_ENTRY);
 }
 
 static void
@@ -70,7 +72,7 @@ ide_workbench_header_bar_init (IdeWorkbenchHeaderBar *self)
 
   gtk_widget_init_template (GTK_WIDGET (self));
 
-  model = ide_application_get_menu_by_id (IDE_APPLICATION_DEFAULT, "gear-menu");
+  model = dzl_application_get_menu_by_id (DZL_APPLICATION_DEFAULT, "gear-menu");
   popover = gtk_popover_new_from_model (NULL, G_MENU_MODEL (model));
   gtk_widget_set_size_request (popover, 225, -1);
   gtk_menu_button_set_popover (priv->menu_button, popover);

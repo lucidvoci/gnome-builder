@@ -145,11 +145,11 @@
                 },
                 {
                     "type": "patch",
-                    "path": "build/flatpak/polkit-build-Add-option-to-build-without-polkitd.patch"
+                    "path": "build-aux/flatpak/polkit-build-Add-option-to-build-without-polkitd.patch"
                 },
                 {
                     "type": "file",
-                    "path": "build/flatpak/polkit-autogen",
+                    "path": "build-aux/flatpak/polkit-autogen",
                     "dest-filename": "autogen.sh"
                 }
             ]
@@ -175,7 +175,7 @@
                 },
                 {
                     "type": "file",
-                    "path": "build/flatpak/setuptools-makefile",
+                    "path": "build-aux/flatpak/setuptools-makefile",
                     "dest-filename": "Makefile"
                 }
             ]
@@ -199,12 +199,12 @@
                 },
                 {
                     "type": "file",
-                    "path": "build/flatpak/setuptools-makefile",
+                    "path": "build-aux/flatpak/setuptools-makefile",
                     "dest-filename": "Makefile"
                 },
                 {
                     "type": "patch",
-                    "path": "build/flatpak/lxml-Fix-getting-lib-version-when-using-pkg-config.patch"
+                    "path": "build-aux/flatpak/lxml-Fix-getting-lib-version-when-using-pkg-config.patch"
                 }
             ]
         },
@@ -349,7 +349,7 @@
                 },
                 {
                     "type": "file",
-                    "path": "build/flatpak/setuptools-makefile",
+                    "path": "build-aux/flatpak/setuptools-makefile",
                     "dest-filename": "Makefile"
                 }
             ]
@@ -536,8 +536,9 @@
             "sources": [
                 {
                     "type": "git",
-                    "url": "https://git.gnome.org/browse/json-glib",
-                    "branch": "json-glib-1-2"
+                    "buildsystem": "meson",
+                    "builddir": true,
+                    "url": "https://git.gnome.org/browse/json-glib"
                 }
             ]
         },
@@ -564,7 +565,7 @@
                 },
                 {
                     "type": "file",
-                    "path": "build/flatpak/setuptools-makefile",
+                    "path": "build-aux/flatpak/setuptools-makefile",
                     "dest-filename": "Makefile"
                 }
             ]
@@ -581,8 +582,46 @@
             ]
         },
         {
+            "name": "template-glib",
+            "config-opts": [ "--libdir=/app/lib" ],
+            "buildsystem": "meson",
+            "builddir": true,
+            "sources": [
+                {
+                    "type": "git",
+                    "url": "https://git.gnome.org/browse/template-glib"
+                }
+            ]
+        },
+        {
+            "name": "jsonrpc-glib",
+            "config-opts": [ "--libdir=/app/lib" ],
+            "buildsystem": "meson",
+            "builddir": true,
+            "sources": [
+                {
+                    "type": "git",
+                    "url": "https://git.gnome.org/browse/jsonrpc-glib"
+                }
+            ]
+        },
+        {
+            "name": "libdazzle",
+            "config-opts": [ "--libdir=/app/lib" ],
+            "buildsystem": "meson",
+            "builddir": true,
+            "sources": [
+                {
+                    "type": "git",
+                    "url": "https://git.gnome.org/browse/libdazzle"
+                }
+            ]
+        },
+        {
             "name": "gnome-builder",
-            "config-opts": [ "--enable-tracing", "--enable-debug", "--with-channel=flatpak-nightly" ],
+            "buildsystem": "meson",
+            "builddir": true,
+            "config-opts": [ "--libdir=/app/lib", "-Denable-tracing=true", "-Denable-debug=true", "-Dwith-channel=flatpak-nightly" ],
             "sources": [
                 {
                     "type": "git",

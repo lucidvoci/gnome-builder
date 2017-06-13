@@ -372,7 +372,7 @@ ide_workbench_class_init (IdeWorkbenchClass *klass)
     g_signal_new_class_handler ("action",
                                 G_TYPE_FROM_CLASS (klass),
                                 G_SIGNAL_RUN_FIRST | G_SIGNAL_ACTION,
-                                G_CALLBACK (ide_widget_action_with_string),
+                                G_CALLBACK (dzl_gtk_widget_action_with_string),
                                 NULL, NULL, NULL,
                                 G_TYPE_NONE,
                                 3,
@@ -941,7 +941,7 @@ ide_workbench_show_parents (GtkWidget *widget)
   parent = gtk_widget_get_parent (widget);
 
   if (IDE_IS_LAYOUT_PANE (widget))
-    pnl_dock_revealer_set_reveal_child (PNL_DOCK_REVEALER (widget), TRUE);
+    dzl_dock_revealer_set_reveal_child (DZL_DOCK_REVEALER (widget), TRUE);
 
   if (IDE_IS_PERSPECTIVE (widget))
     ide_workbench_set_visible_perspective (ide_widget_get_workbench (widget),

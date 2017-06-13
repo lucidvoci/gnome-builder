@@ -19,7 +19,7 @@
 #ifndef IDE_APPLICATION_PRIVATE_H
 #define IDE_APPLICATION_PRIVATE_H
 
-#include <egg-menu-manager.h>
+#include <dazzle.h>
 #include <gio/gio.h>
 #include <libpeas/peas.h>
 
@@ -27,14 +27,13 @@
 #include "gsettings/ide-language-defaults.h"
 #include "keybindings/ide-keybindings.h"
 #include "projects/ide-recent-projects.h"
-#include "theming/ide-theme-manager.h"
 #include "workers/ide-worker-manager.h"
 
 G_BEGIN_DECLS
 
 struct _IdeApplication
 {
-  GtkApplication       parent_instance;
+  DzlApplication       parent_instance;
 
   IdeApplicationMode   mode;
 
@@ -53,11 +52,6 @@ struct _IdeApplication
 
   GDateTime           *started_at;
 
-  IdeThemeManager     *theme_manager;
-
-  EggMenuManager      *menu_manager;
-  GHashTable          *merge_ids;
-
   GHashTable          *plugin_css;
   GHashTable          *plugin_gresources;
 
@@ -66,8 +60,6 @@ struct _IdeApplication
   GHashTable          *plugin_settings;
 
   GPtrArray           *reapers;
-
-  guint                disable_theme_tracking : 1;
 };
 
 void     ide_application_discover_plugins           (IdeApplication        *self) G_GNUC_INTERNAL;
@@ -78,7 +70,6 @@ gboolean ide_application_local_command_line         (GApplication          *appl
                                                      gchar               ***arguments,
                                                      gint                  *exit_status) G_GNUC_INTERNAL;
 void     ide_application_run_tests                  (IdeApplication        *self);
-gboolean ide_application_get_disable_theme_tracking (IdeApplication        *self) G_GNUC_INTERNAL;
 void     ide_application_open_async                 (IdeApplication        *self,
                                                      GFile                **files,
                                                      gint                   n_files,

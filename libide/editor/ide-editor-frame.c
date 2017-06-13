@@ -18,6 +18,7 @@
 
 #define G_LOG_DOMAIN "ide-editor-frame"
 
+#include <dazzle.h>
 #include <glib/gi18n.h>
 
 #include "ide-debug.h"
@@ -585,7 +586,7 @@ search_revealer_on_child_revealed_changed (IdeEditorFrame *self,
       !gtk_revealer_get_child_revealed (search_revealer))
     return;
 
-  ide_widget_action (GTK_WIDGET (self), "frame", "next-search-result", NULL);
+  dzl_gtk_widget_action (GTK_WIDGET (self), "frame", "next-search-result", NULL);
 
   self->pending_replace_confirm--;
 
@@ -738,7 +739,7 @@ ide_editor_frame__drag_data_received (IdeEditorFrame    *self,
   switch (info)
     {
     case TARGET_URI_LIST:
-      uri_list = ide_dnd_get_uri_list (selection_data);
+      uri_list = dzl_dnd_get_uri_list (selection_data);
 
       if (uri_list)
         {
@@ -759,7 +760,7 @@ ide_editor_frame__drag_data_received (IdeEditorFrame    *self,
            */
           gtk_widget_grab_focus (GTK_WIDGET (self));
 
-          ide_widget_action (GTK_WIDGET (self), "workbench", "open-uri-list", variant);
+          dzl_gtk_widget_action (GTK_WIDGET (self), "workbench", "open-uri-list", variant);
         }
 
       gtk_drag_finish (context, TRUE, FALSE, timestamp);
@@ -781,7 +782,7 @@ ide_editor_frame__search_key_press_event (IdeEditorFrame *self,
   switch (event->keyval)
     {
     case GDK_KEY_Escape:
-      ide_widget_action (GTK_WIDGET (self->search_frame), "search-entry", "exit-search", NULL);
+      dzl_gtk_widget_action (GTK_WIDGET (self->search_frame), "search-entry", "exit-search", NULL);
       return GDK_EVENT_STOP;
 
     case GDK_KEY_KP_Enter:
@@ -790,16 +791,16 @@ ide_editor_frame__search_key_press_event (IdeEditorFrame *self,
       g_free (self->previous_search_string);
       g_object_get (self->search_entry, "text", &self->previous_search_string, NULL);
 
-      ide_widget_action (GTK_WIDGET (self), "frame", "next-search-result", NULL);
+      dzl_gtk_widget_action (GTK_WIDGET (self), "frame", "next-search-result", NULL);
       gtk_widget_grab_focus (GTK_WIDGET (self->source_view));
       return GDK_EVENT_STOP;
 
     case GDK_KEY_Down:
-      ide_widget_action (GTK_WIDGET (self), "frame", "next-search-result", NULL);
+      dzl_gtk_widget_action (GTK_WIDGET (self), "frame", "next-search-result", NULL);
       return GDK_EVENT_STOP;
 
     case GDK_KEY_Up:
-      ide_widget_action (GTK_WIDGET (self), "frame", "previous-search-result", NULL);
+      dzl_gtk_widget_action (GTK_WIDGET (self), "frame", "previous-search-result", NULL);
       return GDK_EVENT_STOP;
 
     default:
@@ -824,20 +825,20 @@ ide_editor_frame__replace_key_press_event (IdeEditorFrame *self,
   switch (event->keyval)
     {
     case GDK_KEY_Escape:
-      ide_widget_action (GTK_WIDGET (self->search_frame), "search-entry", "exit-search", NULL);
+      dzl_gtk_widget_action (GTK_WIDGET (self->search_frame), "search-entry", "exit-search", NULL);
       return GDK_EVENT_STOP;
 
     case GDK_KEY_KP_Enter:
     case GDK_KEY_Return:
-      ide_widget_action (GTK_WIDGET (self->search_frame), "search-entry", "replace", NULL);
+      dzl_gtk_widget_action (GTK_WIDGET (self->search_frame), "search-entry", "replace", NULL);
       return GDK_EVENT_STOP;
 
     case GDK_KEY_Down:
-      ide_widget_action (GTK_WIDGET (self), "frame", "next-search-result", NULL);
+      dzl_gtk_widget_action (GTK_WIDGET (self), "frame", "next-search-result", NULL);
       return GDK_EVENT_STOP;
 
     case GDK_KEY_Up:
-      ide_widget_action (GTK_WIDGET (self), "frame", "previous-search-result", NULL);
+      dzl_gtk_widget_action (GTK_WIDGET (self), "frame", "previous-search-result", NULL);
       return GDK_EVENT_STOP;
 
     default:
@@ -973,7 +974,7 @@ ide_editor_frame__search_populate_popup (IdeEditorFrame *self,
 
       group = gtk_widget_get_action_group (GTK_WIDGET (self->search_frame), "search-entry");
 
-      menu = ide_application_get_menu_by_id (IDE_APPLICATION_DEFAULT, "ide-editor-frame-search-menu");
+      menu = dzl_application_get_menu_by_id (DZL_APPLICATION_DEFAULT, "ide-editor-frame-search-menu");
       gtk_menu_shell_bind_model (GTK_MENU_SHELL (popup), G_MENU_MODEL (menu), NULL, TRUE);
 
       clipboard = gtk_widget_get_clipboard (GTK_WIDGET (entry), GDK_SELECTION_CLIPBOARD);

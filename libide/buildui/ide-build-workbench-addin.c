@@ -18,7 +18,7 @@
 
 #define G_LOG_DOMAIN "ide-build-workbench-addin"
 
-#include <egg-binding-group.h>
+#include <dazzle.h>
 #include <glib/gi18n.h>
 
 #include "ide-build-log-panel.h"
@@ -70,7 +70,7 @@ ide_build_workbench_addin_set_pipeline (IdeBuildWorkbenchAddin *self,
       if (!gtk_widget_get_visible (GTK_WIDGET (self->build_log_panel)))
         {
           gtk_widget_show (GTK_WIDGET (self->build_log_panel));
-          pnl_dock_item_present (PNL_DOCK_ITEM (self->build_log_panel));
+          dzl_dock_item_present (DZL_DOCK_ITEM (self->build_log_panel));
         }
 
       g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_PIPELINE]);

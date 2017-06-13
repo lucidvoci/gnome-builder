@@ -18,7 +18,7 @@
 
 #include <glib/gi18n.h>
 
-#include "egg-signal-group.h"
+#include "dazzle.h"
 
 #include "ide-layout-pane.h"
 #include "ide-workbench.h"
@@ -27,14 +27,14 @@
 
 struct _IdeLayoutPane
 {
-  PnlDockBinEdge    parent_instance;
+  DzlDockBinEdge    parent_instance;
 
-  EggSignalGroup   *toplevel_signals;
+  DzlSignalGroup   *toplevel_signals;
 
-  PnlDockStack     *dock_stack;
+  DzlDockStack     *dock_stack;
 };
 
-G_DEFINE_TYPE (IdeLayoutPane, ide_layout_pane, PNL_TYPE_DOCK_BIN_EDGE)
+G_DEFINE_TYPE (IdeLayoutPane, ide_layout_pane, DZL_TYPE_DOCK_BIN_EDGE)
 
 static void
 ide_layout_pane_add (GtkContainer *container,
@@ -44,7 +44,7 @@ ide_layout_pane_add (GtkContainer *container,
 
   g_assert (IDE_IS_LAYOUT_PANE (self));
 
-  if (PNL_IS_DOCK_WIDGET (widget))
+  if (DZL_IS_DOCK_WIDGET (widget))
     gtk_container_add (GTK_CONTAINER (self->dock_stack), widget);
   else
     GTK_CONTAINER_CLASS (ide_layout_pane_parent_class)->add (container, widget);
@@ -93,7 +93,7 @@ ide_layout_pane_hierarchy_changed (GtkWidget *widget,
   if (!GTK_IS_WINDOW (toplevel))
     toplevel = NULL;
 
-  egg_signal_group_set_target (self->toplevel_signals, toplevel);
+  dzl_signal_group_set_target (self->toplevel_signals, toplevel);
 }
 
 static void
@@ -119,8 +119,6 @@ ide_layout_pane_class_init (IdeLayoutPaneClass *klass)
 
   container_class->add = ide_layout_pane_add;
 
-  gtk_widget_class_set_css_name (widget_class, "layoutpane");
-
   gtk_widget_class_set_template_from_resource (widget_class, "/org/gnome/builder/ui/ide-layout-pane.ui");
   gtk_widget_class_bind_template_child (widget_class, IdeLayoutPane, dock_stack);
 }
@@ -128,8 +126,8 @@ ide_layout_pane_class_init (IdeLayoutPaneClass *klass)
 static void
 ide_layout_pane_init (IdeLayoutPane *self)
 {
-  self->toplevel_signals = egg_signal_group_new (GTK_TYPE_WINDOW);
-  egg_signal_group_connect_object (self->toplevel_signals,
+  self->toplevel_signals = dzl_signal_group_new (GTK_TYPE_WINDOW);
+  dzl_signal_group_connect_object (self->toplevel_signals,
                                    "set-focus",
                                    G_CALLBACK (workbench_focus_changed),
                                    self,

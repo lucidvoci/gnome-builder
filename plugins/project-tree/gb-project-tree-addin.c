@@ -16,6 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <dazzle.h>
 #include <glib/gi18n.h>
 #include <ide.h>
 
@@ -29,7 +30,7 @@ struct _GbProjectTreeAddin
 {
   GObject    parent_instance;
 
-  IdeTree   *tree;
+  DzlTree   *tree;
   GtkWidget *panel;
 };
 
@@ -81,7 +82,7 @@ gb_project_tree_addin_load (IdeWorkbenchAddin *addin,
   content = ide_editor_perspective_get_center_widget (IDE_EDITOR_PERSPECTIVE (editor));
   g_assert (content != NULL);
 
-  grid = ide_widget_find_child_typed (content, IDE_TYPE_LAYOUT_GRID);
+  grid = dzl_gtk_widget_find_child_typed (content, IDE_TYPE_LAYOUT_GRID);
   g_assert (grid != NULL);
 
   g_signal_connect_object (grid,
@@ -100,7 +101,7 @@ gb_project_tree_addin_load (IdeWorkbenchAddin *addin,
   g_object_add_weak_pointer (G_OBJECT (self->tree), (gpointer *)&self->tree);
   gtk_container_add (GTK_CONTAINER (scroller), GTK_WIDGET (self->tree));
 
-  self->panel = g_object_new (PNL_TYPE_DOCK_WIDGET,
+  self->panel = g_object_new (DZL_TYPE_DOCK_WIDGET,
                               "expand", TRUE,
                               "title", _("Project"),
                               "visible", TRUE,

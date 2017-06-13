@@ -42,13 +42,11 @@
 #include "application/ide-application-tool.h"
 #include "modelines/modeline-parser.h"
 #include "resources/ide-resources.h"
-#include "theming/ide-css-provider.h"
-#include "theming/ide-theme-manager.h"
 #include "util/ide-flatpak.h"
 #include "workbench/ide-workbench.h"
 #include "workers/ide-worker.h"
 
-G_DEFINE_TYPE (IdeApplication, ide_application, GTK_TYPE_APPLICATION)
+G_DEFINE_TYPE (IdeApplication, ide_application, DZL_TYPE_APPLICATION)
 
 static GThread *main_thread;
 
@@ -92,61 +90,6 @@ ide_application_make_skeleton_dirs (IdeApplication *self)
 }
 
 static void
-ide_application_register_theme_overrides (IdeApplication *self)
-{
-  g_autoptr(GSettings) settings = NULL;
-  GtkSettings *gtk_settings;
-  GdkScreen *screen;
-  gboolean wants_dark_theme = FALSE;
-
-  IDE_ENTRY;
-
-  g_assert (IDE_IS_APPLICATION (self));
-
-  screen = gdk_screen_get_default ();
-  gtk_settings = gtk_settings_get_for_screen (screen);
-  settings = g_settings_new ("org.gnome.builder");
-
-  /*
-   * As early as possible, overwrite the gtk theme if we are running in
-   * flatpak. We want to ensure that we provide the best visual appearance
-   * that we can, for which we only support the internal Gtk theme currently.
-   *
-   * If we can get a designer that manages other themes and keeps them up
-   * to date and working inside flatpak, we can consider doing something
-   * different here.
-   */
-  if (ide_is_flatpak () && g_getenv ("GTK_THEME") == NULL)
-    {
-      g_object_set (gtk_settings,
-                    "gtk-theme-name", "Adwaita",
-                    NULL);
-    }
-
-  self->theme_manager = ide_theme_manager_new ();
-
-  /*
-   * Some users override the "default to dark theme" in gnome-tweak-tool,
-   * which means if they haven't selected the dark theme, we will
-   * inadvertantly set the application to light-mode. If we detect this,
-   * we will avoid tracking the dark status.
-   */
-  g_object_get (gtk_settings,
-                "gtk-application-prefer-dark-theme", &wants_dark_theme,
-                NULL);
-
-  if (wants_dark_theme || g_getenv ("GTK_THEME") != NULL)
-    self->disable_theme_tracking = TRUE;
-
-  if (!self->disable_theme_tracking)
-    g_settings_bind (settings, "night-mode",
-                     gtk_settings, "gtk-application-prefer-dark-theme",
-                     G_SETTINGS_BIND_DEFAULT);
-
-  IDE_EXIT;
-}
-
-static void
 ide_application_register_keybindings (IdeApplication *self)
 {
   g_autoptr(GSettings) settings = NULL;
@@ -167,18 +110,11 @@ ide_application_register_keybindings (IdeApplication *self)
 static void
 ide_application_register_plugin_accessories (IdeApplication *self)
 {
-  GMenu *app_menu;
   IDE_ENTRY;
 
   g_assert (IDE_IS_APPLICATION (self));
 
-  self->menu_manager = egg_menu_manager_new ();
-  egg_menu_manager_add_resource (self->menu_manager, "/org/gnome/builder/gtk/menus.ui", NULL);
-
   ide_application_init_plugin_accessories (self);
-
-  app_menu = egg_menu_manager_get_menu_by_id (self->menu_manager, "app-menu");
-  gtk_application_set_app_menu (GTK_APPLICATION (self), G_MENU_MODEL (app_menu));
 
   IDE_EXIT;
 }
@@ -381,6 +317,29 @@ ide_application_language_defaults_cb (GObject      *object,
 }
 
 static void
+ide_application_register_settings (IdeApplication *self)
+{
+  IDE_ENTRY;
+
+  g_assert (IDE_IS_APPLICATION (self));
+
+  if (g_getenv ("GTK_THEME") == NULL)
+    {
+      g_autoptr(GSettings) settings = NULL;
+      GtkSettings *gtk_settings;
+
+      settings = g_settings_new ("org.gnome.builder");
+      gtk_settings = gtk_settings_get_default ();
+
+      g_settings_bind (settings, "night-mode",
+                     gtk_settings, "gtk-application-prefer-dark-theme",
+                     G_SETTINGS_BIND_DEFAULT);
+    }
+
+  IDE_EXIT;
+}
+
+static void
 ide_application_startup (GApplication *application)
 {
   IdeApplication *self = (IdeApplication *)application;
@@ -401,7 +360,7 @@ ide_application_startup (GApplication *application)
     {
       ide_application_make_skeleton_dirs (self);
       ide_language_defaults_init_async (NULL, ide_application_language_defaults_cb, NULL);
-      ide_application_register_theme_overrides (self);
+      ide_application_register_settings (self);
       ide_application_register_keybindings (self);
       ide_application_actions_init (self);
 
@@ -450,11 +409,11 @@ ide_application_shutdown (GApplication *application)
 
   for (guint i = 0; i < self->reapers->len; i++)
     {
-      IdeDirectoryReaper *reaper = g_ptr_array_index (self->reapers, i);
+      DzlDirectoryReaper *reaper = g_ptr_array_index (self->reapers, i);
 
-      g_assert (IDE_IS_DIRECTORY_REAPER (reaper));
+      g_assert (DZL_IS_DIRECTORY_REAPER (reaper));
 
-      ide_directory_reaper_execute (reaper, NULL, NULL);
+      dzl_directory_reaper_execute (reaper, NULL, NULL);
     }
 }
 
@@ -495,7 +454,6 @@ ide_application_finalize (GObject *object)
   g_clear_pointer (&self->dbus_address, g_free);
   g_clear_pointer (&self->tool_arguments, g_strfreev);
   g_clear_pointer (&self->started_at, g_date_time_unref);
-  g_clear_pointer (&self->merge_ids, g_hash_table_unref);
   g_clear_pointer (&self->plugin_css, g_hash_table_unref);
   g_clear_pointer (&self->plugin_settings, g_hash_table_unref);
   g_clear_pointer (&self->reapers, g_ptr_array_unref);
@@ -503,8 +461,6 @@ ide_application_finalize (GObject *object)
   g_clear_object (&self->worker_manager);
   g_clear_object (&self->keybindings);
   g_clear_object (&self->recent_projects);
-  g_clear_object (&self->theme_manager);
-  g_clear_object (&self->menu_manager);
 
   G_OBJECT_CLASS (ide_application_parent_class)->finalize (object);
 }
@@ -757,31 +713,6 @@ ide_application_get_started_at (IdeApplication *self)
   return self->started_at;
 }
 
-/**
- * ide_application_get_menu_by_id:
- * @self: An #IdeApplication.
- * @id: The id of the menu to lookup.
- *
- * Similar to gtk_application_get_menu_by_id() but takes into account merging
- * the menus provided by, and extended by, plugins.
- *
- * Returns: (transfer none): A #GMenu.
- */
-GMenu *
-ide_application_get_menu_by_id (IdeApplication *self,
-                                const gchar    *id)
-{
-  g_return_val_if_fail (IDE_IS_APPLICATION (self), NULL);
-  g_return_val_if_fail (id != NULL, NULL);
-
-  if (self->menu_manager != NULL)
-    return egg_menu_manager_get_menu_by_id (self->menu_manager, id);
-
-  g_critical ("%s() called by non-UI process", G_STRFUNC);
-
-  return NULL;
-}
-
 gboolean
 ide_application_open_project (IdeApplication *self,
                               GFile          *file)
@@ -837,14 +768,6 @@ ide_application_open_project (IdeApplication *self,
     return FALSE;
 }
 
-gboolean
-ide_application_get_disable_theme_tracking (IdeApplication *self)
-{
-  g_return_val_if_fail (IDE_IS_APPLICATION (self), FALSE);
-
-  return self->disable_theme_tracking;
-}
-
 /**
  * ide_application_get_main_thread:
  *
@@ -862,10 +785,10 @@ ide_application_get_main_thread (void)
 
 void
 ide_application_add_reaper (IdeApplication     *self,
-                            IdeDirectoryReaper *reaper)
+                            DzlDirectoryReaper *reaper)
 {
   g_return_if_fail (IDE_IS_APPLICATION (self));
-  g_return_if_fail (IDE_IS_DIRECTORY_REAPER (reaper));
+  g_return_if_fail (DZL_IS_DIRECTORY_REAPER (reaper));
 
   g_ptr_array_add (self->reapers, g_object_ref (reaper));
 }

@@ -16,8 +16,7 @@ libide_enum_headers = [
   'workbench/ide-layout-stack-split.h',
 ]
 
-libide_header_subdir = 'gnome-builder-' + meson.project_version() + '/libide'
-libide_header_dir = join_paths(get_option('includedir'), libide_header_subdir)
+libide_header_dir = pkgincludedir + '/libide'
 
 libide_enums = gnome.mkenums('ide-enums',
   h_template: 'ide-enums.h.in',
@@ -106,16 +105,7 @@ libide_public_headers = [
   'plugins/ide-extension-adapter.h',
   'plugins/ide-extension-set-adapter.h',
   'preferences/ide-preferences-addin.h',
-  'preferences/ide-preferences-bin.h',
-  'preferences/ide-preferences-entry.h',
-  'preferences/ide-preferences-file-chooser-button.h',
-  'preferences/ide-preferences-flow-box.h',
-  'preferences/ide-preferences-font-button.h',
-  'preferences/ide-preferences-group.h',
-  'preferences/ide-preferences-page.h',
-  'preferences/ide-preferences-spin-button.h',
-  'preferences/ide-preferences-switch.h',
-  'preferences/ide-preferences.h',
+  'preferences/ide-preferences-perspective.h',
   'projects/ide-project-edit.h',
   'projects/ide-project-file.h',
   'projects/ide-project-files.h',
@@ -132,15 +122,9 @@ libide_public_headers = [
   'runtimes/ide-runtime-manager.h',
   'runtimes/ide-runtime-provider.h',
   'runtimes/ide-runtime.h',
-  'search/ide-omni-search-display.h',
-  'search/ide-omni-search-entry.h',
-  'search/ide-omni-search-group.h',
-  'search/ide-omni-search-row.h',
-  'search/ide-pattern-spec.h',
-  'search/ide-search-context.h',
   'search/ide-search-engine.h',
+  'search/ide-search-entry.h',
   'search/ide-search-provider.h',
-  'search/ide-search-reducer.h',
   'search/ide-search-result.h',
   'snippets/ide-source-snippet-chunk.h',
   'snippets/ide-source-snippet-context.h',
@@ -177,23 +161,13 @@ libide_public_headers = [
   'transfers/ide-transfer-button.h',
   'transfers/ide-transfers-button.h',
   'transfers/ide-transfers-progress-icon.h',
-  'tree/ide-tree-builder.h',
-  'tree/ide-tree-node.h',
-  'tree/ide-tree-types.h',
-  'tree/ide-tree.h',
-  'util/ide-cairo.h',
-  'util/ide-dnd.h',
-  'util/ide-directory-reaper.h',
-  'util/ide-file-manager.h',
   'util/ide-flatpak.h',
   'util/ide-glib.h',
   'util/ide-gtk.h',
   'util/ide-line-reader.h',
   'util/ide-list-inline.h',
-  'util/ide-pango.h',
   'util/ide-posix.h',
   'util/ide-progress.h',
-  'util/ide-rgba.h',
   'util/ide-settings.h',
   'util/ide-uri.h',
   'vcs/ide-vcs-config.h',
@@ -231,10 +205,10 @@ libide_debug_h = configure_file(
 foreach header: libide_public_headers
   header_split = header.split('/')
   if header_split.length() == 2
-    header_path = join_paths(libide_header_subdir, header_split[0])
-    install_headers(header, subdir: header_path)
+    header_path = join_paths(libide_header_dir, header_split[0])
+    install_headers(header, install_dir: header_path)
   else
-    install_headers(header, subdir: libide_header_subdir)
+    install_headers(header, install_dir: libide_header_dir)
   endif
 endforeach
 
@@ -325,15 +299,7 @@ libide_public_sources = [
   'plugins/ide-extension-adapter.c',
   'plugins/ide-extension-set-adapter.c',
   'preferences/ide-preferences-addin.c',
-  'preferences/ide-preferences-entry.c',
-  'preferences/ide-preferences-file-chooser-button.c',
-  'preferences/ide-preferences-flow-box.c',
-  'preferences/ide-preferences-font-button.c',
-  'preferences/ide-preferences-group.c',
-  'preferences/ide-preferences-page.c',
-  'preferences/ide-preferences-spin-button.c',
-  'preferences/ide-preferences-switch.c',
-  'preferences/ide-preferences.c',
+  'preferences/ide-preferences-perspective.c',
   'projects/ide-project-edit.c',
   'projects/ide-project-file.c',
   'projects/ide-project-files.c',
@@ -350,13 +316,8 @@ libide_public_sources = [
   'runtimes/ide-runtime-manager.c',
   'runtimes/ide-runtime-provider.c',
   'runtimes/ide-runtime.c',
-  'search/ide-omni-search-display.c',
-  'search/ide-omni-search-entry.c',
-  'search/ide-omni-search-group.c',
-  'search/ide-omni-search-row.c',
-  'search/ide-pattern-spec.c',
-  'search/ide-search-context.c',
   'search/ide-search-engine.c',
+  'search/ide-search-entry.c',
   'search/ide-search-provider.c',
   'search/ide-search-result.c',
   'snippets/ide-source-snippet-chunk.c',
@@ -394,21 +355,12 @@ libide_public_sources = [
   'transfers/ide-transfer-button.c',
   'transfers/ide-transfers-button.c',
   'transfers/ide-transfers-progress-icon.c',
-  'tree/ide-tree-builder.c',
-  'tree/ide-tree-node.c',
-  'tree/ide-tree.c',
-  'util/ide-cairo.c',
-  'util/ide-dnd.c',
-  'util/ide-directory-reaper.c',
-  'util/ide-file-manager.c',
   'util/ide-flatpak.c',
   'util/ide-glib.c',
   'util/ide-gtk.c',
   'util/ide-line-reader.c',
-  'util/ide-pango.c',
   'util/ide-posix.c',
   'util/ide-progress.c',
-  'util/ide-rgba.c',
   'util/ide-settings.c',
   'util/ide-uri.c',
   'vcs/ide-vcs-config.c',
@@ -444,7 +396,7 @@ libide_args = []
 #libide_vcs_version = vcs_tag(
 #  input: 'ide-vcs-version.h.in',
 #  output: 'ide-vcs-version.h',
-#  command: '../build/meson/meson_vcs_tag.sh',
+#  command: '../build-aux/meson/meson_vcs_tag.sh',
 #  fallback: '',
 #)
 
@@ -535,18 +487,13 @@ libide_sources = libide_generated_headers + libide_public_sources + [
   'plugins/ide-extension-util.c',
   'plugins/ide-extension-util.h',
   'projects/ide-project-edit-private.h',
-  'preferences/ide-preferences-bin-private.h',
-  'preferences/ide-preferences-bin.c',
   'preferences/ide-preferences-builtin.c',
   'preferences/ide-preferences-builtin.h',
-  'preferences/ide-preferences-group-private.h',
   'preferences/ide-preferences-language-row.c',
   'preferences/ide-preferences-language-row.h',
-  'preferences/ide-preferences-page-private.h',
-  'preferences/ide-preferences-perspective.c',
-  'preferences/ide-preferences-perspective.h',
   'runner/ide-run-manager-private.h',
   'search/ide-search-reducer.c',
+  'search/ide-search-reducer.h',
   'snippets/ide-source-snippet-completion-item.c',
   'snippets/ide-source-snippet-completion-item.h',
   'snippets/ide-source-snippet-completion-provider.c',
@@ -573,21 +520,12 @@ libide_sources = libide_generated_headers + libide_public_sources + [
   'subprocess/ide-breakout-subprocess-private.h',
   'subprocess/ide-simple-subprocess.c',
   'subprocess/ide-simple-subprocess.h',
-  'theatrics/ide-box-theatric.c',
-  'theatrics/ide-box-theatric.h',
-  'theming/ide-css-provider.c',
-  'theming/ide-css-provider.h',
-  'theming/ide-theme-manager.c',
-  'theming/ide-theme-manager.h',
-  'tree/ide-tree-private.h',
   'util/ide-async-helper.c',
   'util/ide-async-helper.h',
   'util/ide-battery-monitor.c',
   'util/ide-battery-monitor.h',
   'util/ide-doc-seq.c',
   'util/ide-doc-seq.h',
-  'util/ide-gdk.c',
-  'util/ide-gdk.h',
   'util/ide-ref-ptr.c',
   'util/ide-ref-ptr.h',
   'util/ide-window-settings.c',
@@ -624,15 +562,13 @@ libide_deps = [
   libgiounix_dep,
   libgtk_dep,
   libpeas_dep,
-  libegg_dep,
-  libpnl_dep,
-  libtmpl_dep,
+  libdazzle_dep,
+  libtemplate_glib_dep,
   libxml_dep,
-  libsearch_dep,
   libgd_dep,
   libnautilus_dep,
   libjson_glib_dep,
-  libjsonrpc_dep,
+  libjsonrpc_glib_dep,
 ]
 
 contrib_dir = join_paths(meson.source_root(), 'contrib/')
@@ -690,81 +626,94 @@ libide = shared_library('ide-' + libide_api_version,
   libide_resources + libide_icons_resources + libide_sources,
   dependencies: libide_deps,
   link_depends: 'ide.map',
-  c_args: libide_args,
-  link_args: [
-    '-Wl,--version-script,' + join_paths(meson.current_source_dir(), 'ide.map'),
-  ],
-  install: true,
-  install_dir: pkglibdir,
+        c_args: libide_args,
+     link_args: [ '-Wl,--version-script,' + join_paths(meson.current_source_dir(), 'ide.map') ],
+       install: true,
+   install_dir: pkglibdir,
 )
 
 libide_dep = declare_dependency(
-  sources: libide_generated_headers,
-  dependencies: [
-    libgio_dep,
-    libgtk_dep,
-    libgtksource_dep,
-    libpnl_dep,
-    libegg_dep,
-    libjson_glib_dep,
-  ],
-  link_with: libide,
+              sources: libide_generated_headers,
+         dependencies: [ libdazzle_dep,
+                         libgd_dep,
+                         libgio_dep,
+                         libgtk_dep,
+                         libgtksource_dep,
+                         libjson_glib_dep,
+                         libtemplate_glib_dep,
+                         libjsonrpc_glib_dep ],
+            link_with: libide,
   include_directories: include_directories('.'),
 )
 
 # Doesn't link to libide
+# TODO: I think we can remove most of the links here and just setup includes
 libide_plugin_dep = declare_dependency(
-  sources: libide_generated_headers,
-  dependencies: [
-    libgio_dep,
-    libgtk_dep,
-    libgtksource_dep,
-    libpnl_dep,
-    libegg_dep,
-    libjson_glib_dep,
-  ],
+              sources: libide_generated_headers,
   include_directories: include_directories('.'),
+         dependencies: [ libdazzle_dep,
+                         libgd_dep,
+                         libgio_dep,
+                         libgtk_dep,
+                         libgd_dep,
+                         libgtksource_dep,
+                         libtemplate_glib_dep,
+                         libjson_glib_dep,
+                         libjsonrpc_glib_dep ],
+)
+
+pkgg = import('pkgconfig')
+
+pkgg.generate(
+    libraries: [libide],
+      subdirs: [ 'gnome-builder-@0@/libide'.format(meson.project_version()) ],
+      version: meson.project_version(),
+         name: 'Libide',
+     filebase: 'libide-1.0',
+  description: 'Libide contains the components used to build the GNOME Builder IDE.',
+     requires: [ 'gtk+-3.0', 'gtksourceview-3.0', 'libdazzle-1.0', 'template-glib-1.0', 'jsonrpc-glib-1.0' ],
+  install_dir: join_paths(pkglibdir, 'pkgconfig'),
 )
 
 if get_option('with_introspection')
 
   libide_gir = gnome.generate_gir(libide,
-    sources: libide_generated_headers + libide_public_headers + libide_public_sources,
-    nsversion: libide_api_version,
-    namespace: 'Ide',
-    symbol_prefix: 'ide',
-    identifier_prefix: 'Ide',
-    link_with: [
-      libegg, libtmpl,
-    ],
-    includes: [
-      libegg_gir[0], 'Gio-2.0', 'GtkSource-3.0',
-      'Peas-1.0', libpnl_gir[0], libtmpl_gir[0],
-      'Json-1.0'],
-    install: true,
-    install_dir_gir: pkggirdir,
+                sources: libide_generated_headers + libide_public_headers + libide_public_sources,
+              nsversion: libide_api_version,
+              namespace: 'Ide',
+           dependencies: [ libgd_dep ],
+          symbol_prefix: 'ide',
+      identifier_prefix: 'Ide',
+               includes: [ 'Gio-2.0', 'GtkSource-3.0', 'Peas-1.0', libdazzle_gir, 'Json-1.0', libtemplate_glib_gir ],
+                install: true,
+        install_dir_gir: pkggirdir,
     install_dir_typelib: pkgtypelibdir,
-    extra_args: [
-      '--c-include=ide.h',
-    ]
+             extra_args: [ '--c-include=ide.h' ]
   )
 
   if get_option('with_vapi')
 
+    configure_file(
+              input: 'libide-' + libide_api_version + '.deps',
+             output: 'libide-' + libide_api_version + '.deps',
+      configuration: configuration_data(),
+            install: true,
+        install_dir: pkgvapidir,
+    )
+
     libide_vapi = gnome.generate_vapi('libide-' + libide_api_version,
-      sources: libide_gir[0],
-      packages: [
-        'gio-2.0',
-        'gtk+-3.0',
-        'gtksourceview-3.0',
-        'libpeas-1.0',
-        'json-glib-1.0',
-        libpnl_vapi,
-        libegg_vapi,
-        libtmpl_vapi,
-      ],
-      install: true,
+          sources: libide_gir[0],
+          install: true,
       install_dir: pkgvapidir,
+         packages: [
+           'gio-2.0',
+           'gtk+-3.0',
+           'gtksourceview-3.0',
+           'json-glib-1.0',
+           libdazzle_vapi,
+           'libpeas-1.0',
+           libtemplate_glib_vapi,
+         ],
     )
 
   endif

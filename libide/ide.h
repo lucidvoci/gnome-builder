@@ -19,7 +19,7 @@
 #ifndef IDE_H
 #define IDE_H
 
-#include <gio/gio.h>
+#include <dazzle.h>
 
 G_BEGIN_DECLS
 
@@ -90,17 +90,8 @@ G_BEGIN_DECLS
 #include "langserv/ide-langserv-util.h"
 #include "local/ide-local-device.h"
 #include "logging/ide-log.h"
-#include "preferences/ide-preferences.h"
 #include "preferences/ide-preferences-addin.h"
-#include "preferences/ide-preferences-bin.h"
-#include "preferences/ide-preferences-entry.h"
-#include "preferences/ide-preferences-file-chooser-button.h"
-#include "preferences/ide-preferences-font-button.h"
-#include "preferences/ide-preferences-group.h"
-#include "preferences/ide-preferences-page.h"
 #include "preferences/ide-preferences-perspective.h"
-#include "preferences/ide-preferences-spin-button.h"
-#include "preferences/ide-preferences-switch.h"
 #include "projects/ide-project-edit.h"
 #include "projects/ide-project-file.h"
 #include "projects/ide-project-files.h"
@@ -115,10 +106,8 @@ G_BEGIN_DECLS
 #include "runtimes/ide-runtime-manager.h"
 #include "runtimes/ide-runtime-provider.h"
 #include "runtimes/ide-runtime.h"
-#include "search/ide-omni-search-row.h"
-#include "search/ide-pattern-spec.h"
-#include "search/ide-search-context.h"
 #include "search/ide-search-engine.h"
+#include "search/ide-search-entry.h"
 #include "search/ide-search-provider.h"
 #include "search/ide-search-reducer.h"
 #include "search/ide-search-result.h"
@@ -148,14 +137,7 @@ G_BEGIN_DECLS
 #include "transfers/ide-transfer.h"
 #include "transfers/ide-transfer-button.h"
 #include "transfers/ide-transfer-manager.h"
-#include "tree/ide-tree-builder.h"
-#include "tree/ide-tree-node.h"
-#include "tree/ide-tree-types.h"
-#include "tree/ide-tree.h"
-#include "util/ide-directory-reaper.h"
-#include "util/ide-file-manager.h"
 #include "util/ide-flatpak.h"
-#include "util/ide-glib.h"
 #include "util/ide-gtk.h"
 #include "util/ide-line-reader.h"
 #include "util/ide-list-inline.h"

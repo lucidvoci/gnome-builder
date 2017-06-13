@@ -18,10 +18,7 @@
 
 #define G_LOG_DOMAIN "ide-greeter-perspective"
 
-#include <egg-priority-box.h>
-#include <egg-search-bar.h>
-#include <egg-signal-group.h>
-#include <egg-state-machine.h>
+#include <dazzle.h>
 #include <glib/gi18n.h>
 #include <libpeas/peas.h>
 
@@ -31,7 +28,6 @@
 #include "genesis/ide-genesis-addin.h"
 #include "greeter/ide-greeter-perspective.h"
 #include "greeter/ide-greeter-project-row.h"
-#include "search/ide-pattern-spec.h"
 #include "util/ide-gtk.h"
 #include "workbench/ide-perspective.h"
 #include "workbench/ide-workbench-private.h"
@@ -41,9 +37,9 @@ struct _IdeGreeterPerspective
 {
   GtkBin                parent_instance;
 
-  EggSignalGroup       *signal_group;
+  DzlSignalGroup       *signal_group;
   IdeRecentProjects    *recent_projects;
-  IdePatternSpec       *pattern_spec;
+  DzlPatternSpec       *pattern_spec;
   GActionMap           *actions;
   PeasExtensionSet     *genesis_set;
 
@@ -69,9 +65,9 @@ struct _IdeGreeterPerspective
   GtkListBox           *other_projects_list_box;
   GtkButton            *remove_button;
   GtkSearchEntry       *search_entry;
-  EggStateMachine      *state_machine;
+  DzlStateMachine      *state_machine;
   GtkScrolledWindow    *scrolled_window;
-  EggPriorityBox       *genesis_buttons;
+  DzlPriorityBox       *genesis_buttons;
 
   gint                  selected_count;
 };
@@ -198,9 +194,9 @@ ide_greeter_perspective_apply_filter_all (IdeGreeterPerspective *self)
 
   g_assert (IDE_IS_GREETER_PERSPECTIVE (self));
 
-  g_clear_pointer (&self->pattern_spec, ide_pattern_spec_unref);
+  g_clear_pointer (&self->pattern_spec, dzl_pattern_spec_unref);
   if ((text = gtk_entry_get_text (GTK_ENTRY (self->search_entry))))
-    self->pattern_spec = ide_pattern_spec_new (text);
+    self->pattern_spec = dzl_pattern_spec_new (text);
 
   ide_greeter_perspective_apply_filter (self,
                                   self->my_projects_list_box,
@@ -397,7 +393,7 @@ ide_greeter_perspective_set_recent_projects (IdeGreeterPerspective *self,
 
   if (g_set_object (&self->recent_projects, recent_projects))
     {
-      egg_signal_group_set_target (self->signal_group, recent_projects);
+      dzl_signal_group_set_target (self->signal_group, recent_projects);
 
       if (recent_projects != NULL)
         {
@@ -429,7 +425,7 @@ ide_greeter_perspective_filter_row (GtkListBoxRow *row,
     return TRUE;
 
   search_text = ide_greeter_project_row_get_search_text (project_row);
-  ret = ide_pattern_spec_match (self->pattern_spec, search_text);
+  ret = dzl_pattern_spec_match (self->pattern_spec, search_text);
 
   return ret;
 }
@@ -487,7 +483,7 @@ ide_greeter_perspective__row_activated (IdeGreeterPerspective *self,
   g_assert (IDE_IS_GREETER_PROJECT_ROW (row));
   g_assert (GTK_IS_LIST_BOX (list_box));
 
-  if (ide_str_equal0 (egg_state_machine_get_state (self->state_machine), "selection"))
+  if (ide_str_equal0 (dzl_state_machine_get_state (self->state_machine), "selection"))
     {
       gboolean selected = FALSE;
 
@@ -597,7 +593,7 @@ delete_selected_rows (GSimpleAction *action,
   self->selected_count = 0;
   g_simple_action_set_enabled (G_SIMPLE_ACTION (action), FALSE);
 
-  egg_state_machine_set_state (self->state_machine, "browse");
+  dzl_state_machine_set_state (self->state_machine, "browse");
 
   ide_greeter_perspective_apply_filter_all (self);
 }
@@ -780,7 +776,7 @@ ide_greeter_perspective_cancel_clicked (IdeGreeterPerspective *self,
   g_assert (IDE_IS_GREETER_PERSPECTIVE (self));
   g_assert (GTK_IS_BUTTON (cancel_button));
 
-  egg_state_machine_set_state (self->state_machine, "browse");
+  dzl_state_machine_set_state (self->state_machine, "browse");
   ide_greeter_perspective_apply_filter_all (self);
 }
 
@@ -795,7 +791,7 @@ ide_greeter_perspective_show_genesis_view (IdeGreeterPerspective *self,
 
   addin = gtk_stack_get_child_by_name (self->genesis_stack, genesis_addin_name);
   gtk_stack_set_visible_child (self->genesis_stack, addin);
-  egg_state_machine_set_state (self->state_machine, "genesis");
+  dzl_state_machine_set_state (self->state_machine, "genesis");
 
   if (manifest != NULL)
     {
@@ -827,7 +823,7 @@ ide_greeter_perspective_genesis_cancel_clicked (IdeGreeterPerspective *self,
   g_assert (GTK_IS_BUTTON (genesis_cancel_button));
 
   g_cancellable_cancel (self->cancellable);
-  egg_state_machine_set_state (self->state_machine, "browse");
+  dzl_state_machine_set_state (self->state_machine, "browse");
   ide_greeter_perspective_apply_filter_all (self);
 }
 
@@ -1120,7 +1116,7 @@ ide_greeter_perspective_finalize (GObject *object)
   IdeGreeterPerspective *self = (IdeGreeterPerspective *)object;
 
   ide_clear_weak_pointer (&self->ready_binding);
-  g_clear_pointer (&self->pattern_spec, ide_pattern_spec_unref);
+  g_clear_pointer (&self->pattern_spec, dzl_pattern_spec_unref);
   g_clear_object (&self->signal_group);
   g_clear_object (&self->recent_projects);
   g_clear_object (&self->cancellable);
@@ -1222,8 +1218,8 @@ ide_greeter_perspective_init (IdeGreeterPerspective *self)
   };
   GAction *action;
 
-  self->signal_group = egg_signal_group_new (IDE_TYPE_RECENT_PROJECTS);
-  egg_signal_group_connect_object (self->signal_group,
+  self->signal_group = dzl_signal_group_new (IDE_TYPE_RECENT_PROJECTS);
+  dzl_signal_group_connect_object (self->signal_group,
                                    "items-changed",
                                    G_CALLBACK (recent_projects_items_changed),
                                    self,
@@ -1324,7 +1320,7 @@ ide_greeter_perspective_init (IdeGreeterPerspective *self)
 
   self->actions = G_ACTION_MAP (g_simple_action_group_new ());
 
-  action = egg_state_machine_create_action (self->state_machine, "state");
+  action = dzl_state_machine_create_action (self->state_machine, "state");
   g_action_map_add_action (self->actions, action);
   g_object_unref (action);
 

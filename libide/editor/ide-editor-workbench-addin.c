@@ -39,7 +39,7 @@ struct _IdeEditorWorkbenchAddin
 
   IdeWorkbench         *workbench;
 
-  PnlDockManager       *manager;
+  DzlDockManager       *manager;
   IdeEditorPerspective *perspective;
 
   GtkWidget            *new_document_button;
@@ -86,7 +86,7 @@ ide_editor_workbench_addin_load (IdeWorkbenchAddin *addin,
 
   self->workbench = workbench;
 
-  self->manager = pnl_dock_manager_new ();
+  self->manager = dzl_dock_manager_new ();
 
   header = ide_workbench_get_headerbar (workbench);
 
@@ -97,7 +97,7 @@ ide_editor_workbench_addin_load (IdeWorkbenchAddin *addin,
                                                                    "icon-name", "document-new-symbolic",
                                                                    NULL),
                                             NULL);
-  ide_widget_add_style_class (self->new_document_button, "image-button");
+  dzl_gtk_widget_add_style_class (self->new_document_button, "image-button");
 
   ide_workbench_header_bar_insert_left (header,
                                         self->new_document_button,

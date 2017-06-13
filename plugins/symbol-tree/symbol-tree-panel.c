@@ -18,12 +18,9 @@
 
 #define G_LOG_DOMAIN "symbol-tree-panel"
 
-#include <ide.h>
-
+#include <dazzle.h>
 #include <glib/gi18n.h>
 #include <ide.h>
-
-#include "egg-task-cache.h"
 
 #include "symbol-tree.h"
 #include "symbol-tree-builder.h"
@@ -34,15 +31,15 @@
 
 struct _SymbolTreePanel
 {
-  PnlDockWidget   parent_instance;
+  DzlDockWidget   parent_instance;
 
   GCancellable   *cancellable;
-  EggTaskCache   *symbols_cache;
+  DzlTaskCache   *symbols_cache;
   GHashTable     *destroy_connected;
 
   GtkSearchEntry *search_entry;
   GtkStack       *stack;
-  IdeTree        *tree;
+  DzlTree        *tree;
 
   IdeBuffer      *last_document;
   gsize           last_change_count;
@@ -50,7 +47,7 @@ struct _SymbolTreePanel
   guint           refresh_tree_timeout;
 };
 
-G_DEFINE_TYPE (SymbolTreePanel, symbol_tree_panel, PNL_TYPE_DOCK_WIDGET)
+G_DEFINE_TYPE (SymbolTreePanel, symbol_tree_panel, DZL_TYPE_DOCK_WIDGET)
 
 static void refresh_tree (SymbolTreePanel *self);
 
@@ -67,21 +64,21 @@ get_cached_symbol_tree_cb (GObject      *object,
                            GAsyncResult *result,
                            gpointer      user_data)
 {
-  EggTaskCache *cache = (EggTaskCache *)object;
+  DzlTaskCache *cache = (DzlTaskCache *)object;
   g_autoptr(SymbolTreePanel) self = user_data;
   g_autoptr(IdeSymbolTree) symbol_tree = NULL;
   g_autoptr(GError) error = NULL;
-  IdeTreeNode *root;
+  DzlTreeNode *root;
   GtkTreeIter iter;
   GtkTreeModel *model;
 
   IDE_ENTRY;
 
-  g_assert (EGG_IS_TASK_CACHE (cache));
+  g_assert (DZL_IS_TASK_CACHE (cache));
   g_assert (G_IS_ASYNC_RESULT (result));
   g_assert (SYMBOL_IS_TREE_PANEL (self));
 
-  if (!(symbol_tree = egg_task_cache_get_finish (cache, result, &error)))
+  if (!(symbol_tree = dzl_task_cache_get_finish (cache, result, &error)))
     {
       if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED) &&
           !g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
@@ -94,10 +91,10 @@ get_cached_symbol_tree_cb (GObject      *object,
                                               refresh_tree_timeout,
                                               self);
 
-  root = g_object_new (IDE_TYPE_TREE_NODE,
+  root = g_object_new (DZL_TYPE_TREE_NODE,
                        "item", symbol_tree,
                        NULL);
-  ide_tree_set_root (self->tree, root);
+  dzl_tree_set_root (self->tree, root);
 
   model = gtk_tree_view_get_model (GTK_TREE_VIEW (self->tree));
 
@@ -105,11 +102,11 @@ get_cached_symbol_tree_cb (GObject      *object,
     {
       do
         {
-          g_autoptr(IdeTreeNode) node = NULL;
+          g_autoptr(DzlTreeNode) node = NULL;
 
           gtk_tree_model_get (model, &iter, 0, &node, -1);
           if (node != NULL)
-            ide_tree_node_expand (node, FALSE);
+            dzl_tree_node_expand (node, FALSE);
         }
       while (gtk_tree_model_iter_next (model, &iter));
     }
@@ -131,7 +128,7 @@ symbol_tree_panel_buffer_destroy (SymbolTreePanel *self,
                                         G_CALLBACK (symbol_tree_panel_buffer_destroy),
                                         self);
 
-  egg_task_cache_evict (self->symbols_cache, buffer);
+  dzl_task_cache_evict (self->symbols_cache, buffer);
 }
 
 static void
@@ -175,7 +172,7 @@ refresh_tree (SymbolTreePanel *self)
        * TODO: Get cross compile names for nodes so that we can
        *       recompute the open state.
        */
-      ide_tree_set_root (self->tree, ide_tree_node_new ());
+      dzl_tree_set_root (self->tree, dzl_tree_node_new ());
 
       /*
        * Fetch the symbols via the transparent cache.
@@ -201,7 +198,7 @@ refresh_tree (SymbolTreePanel *self)
                                        G_CONNECT_SWAPPED);
             }
 
-          egg_task_cache_get_async (self->symbols_cache,
+          dzl_task_cache_get_async (self->symbols_cache,
                                     document,
                                     FALSE,
                                     self->cancellable,
@@ -242,7 +239,7 @@ get_symbol_tree_cb (GObject      *object,
 }
 
 static void
-populate_cache_cb (EggTaskCache  *cache,
+populate_cache_cb (DzlTaskCache  *cache,
                    gconstpointer  key,
                    GTask         *task,
                    gpointer       user_data)
@@ -253,7 +250,7 @@ populate_cache_cb (EggTaskCache  *cache,
 
   IDE_ENTRY;
 
-  g_assert (EGG_IS_TASK_CACHE (cache));
+  g_assert (DZL_IS_TASK_CACHE (cache));
   g_assert (IDE_IS_BUFFER (document));
   g_assert (G_IS_TASK (task));
 
@@ -279,19 +276,19 @@ populate_cache_cb (EggTaskCache  *cache,
 }
 
 static gboolean
-filter_symbols_cb (IdeTree     *tree,
-                   IdeTreeNode *node,
+filter_symbols_cb (DzlTree     *tree,
+                   DzlTreeNode *node,
                    gpointer     user_data)
 {
-  IdePatternSpec *spec = user_data;
+  DzlPatternSpec *spec = user_data;
   const gchar *text;
 
-  g_assert (IDE_IS_TREE (tree));
-  g_assert (IDE_IS_TREE_NODE (node));
+  g_assert (DZL_IS_TREE (tree));
+  g_assert (DZL_IS_TREE_NODE (node));
   g_assert (spec != NULL);
 
-  if ((text = ide_tree_node_get_text (node)) != NULL)
-    return ide_pattern_spec_match (spec, text);
+  if ((text = dzl_tree_node_get_text (node)) != NULL)
+    return dzl_pattern_spec_match (spec, text);
 
   return FALSE;
 }
@@ -309,17 +306,17 @@ symbol_tree__search_entry_changed (SymbolTreePanel *self,
 
   if (ide_str_empty0 (text))
     {
-      ide_tree_set_filter (self->tree, NULL, NULL, NULL);
+      dzl_tree_set_filter (self->tree, NULL, NULL, NULL);
     }
   else
     {
-      IdePatternSpec *spec;
+      DzlPatternSpec *spec;
 
-      spec = ide_pattern_spec_new (text);
-      ide_tree_set_filter (self->tree,
+      spec = dzl_pattern_spec_new (text);
+      dzl_tree_set_filter (self->tree,
                            filter_symbols_cb,
                            spec,
-                           (GDestroyNotify)ide_pattern_spec_unref);
+                           (GDestroyNotify)dzl_pattern_spec_unref);
       gtk_tree_view_expand_all (GTK_TREE_VIEW (self->tree));
     }
 }
@@ -336,7 +333,7 @@ symbol_tree_panel_buffer_saved (SymbolTreePanel  *self,
   /* Pop the cache if our current file was saved */
   if (buffer == self->last_document)
     {
-      egg_task_cache_evict (self->symbols_cache, buffer);
+      dzl_task_cache_evict (self->symbols_cache, buffer);
       refresh_tree (self);
     }
 }
@@ -392,12 +389,12 @@ symbol_tree_panel_class_init (SymbolTreePanelClass *klass)
 static void
 symbol_tree_panel_init (SymbolTreePanel *self)
 {
-  IdeTreeNode *root;
-  IdeTreeBuilder *builder;
+  DzlTreeNode *root;
+  DzlTreeBuilder *builder;
 
   self->destroy_connected = g_hash_table_new (NULL, NULL);
 
-  self->symbols_cache = egg_task_cache_new (g_direct_hash,
+  self->symbols_cache = dzl_task_cache_new (g_direct_hash,
                                             g_direct_equal,
                                             g_object_ref,
                                             g_object_unref,
@@ -408,17 +405,17 @@ symbol_tree_panel_init (SymbolTreePanel *self)
                                             self,
                                             NULL);
 
-  egg_task_cache_set_name (self->symbols_cache, "symbol-tree symbol cache");
+  dzl_task_cache_set_name (self->symbols_cache, "symbol-tree symbol cache");
 
   gtk_widget_init_template (GTK_WIDGET (self));
 
   g_object_set (self, "title", _("Symbols"), NULL);
 
-  root = ide_tree_node_new ();
-  ide_tree_set_root (self->tree, root);
+  root = dzl_tree_node_new ();
+  dzl_tree_set_root (self->tree, root);
 
   builder = g_object_new (SYMBOL_TYPE_TREE_BUILDER, NULL);
-  ide_tree_add_builder (self->tree, builder);
+  dzl_tree_add_builder (self->tree, builder);
 
   g_signal_connect_object (self->search_entry,
                            "changed",

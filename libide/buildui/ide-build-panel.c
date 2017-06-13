@@ -25,7 +25,7 @@
 
 struct _IdeBuildPanel
 {
-  PnlDockWidget        parent_instance;
+  DzlDockWidget        parent_instance;
 
   GHashTable          *diags_hash;
   IdeBuildPipeline    *pipeline;
@@ -45,7 +45,7 @@ struct _IdeBuildPanel
   guint                warning_count;
 };
 
-G_DEFINE_TYPE (IdeBuildPanel, ide_build_panel, PNL_TYPE_DOCK_WIDGET)
+G_DEFINE_TYPE (IdeBuildPanel, ide_build_panel, DZL_TYPE_DOCK_WIDGET)
 
 enum {
   COLUMN_DIAGNOSTIC,
@@ -162,7 +162,7 @@ ide_build_panel_update_running_time (IdeBuildPanel *self)
       build_manager = ide_context_get_build_manager (context);
 
       span = ide_build_manager_get_running_time (build_manager);
-      text = ide_g_time_span_to_label (span);
+      text = dzl_g_time_span_to_label (span);
     }
 
   gtk_label_set_label (self->running_time_label, text);

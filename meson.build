@@ -14,6 +14,13 @@ MAJOR_VERSION = version_split[0]
 MINOR_VERSION = version_split[1]
 MICRO_VERSION = version_split[2]
 
+pkglibdir_abs = join_paths(get_option('prefix'), get_option('libdir'), 'gnome-builder')
+pkglibdir = join_paths(get_option('libdir'), 'gnome-builder')
+pkgincludedir = join_paths(get_option('includedir'), 'gnome-builder')
+pkggirdir = join_paths(get_option('datadir'),'gnome-builder', 'gir-1.0')
+pkgtypelibdir = join_paths(get_option('libdir'), 'gnome-builder', 'girepository-1.0')
+pkgvapidir = join_paths(get_option('datadir'), 'gnome-builder/vapi')
+
 conf = configuration_data()
 conf.set_quoted('PACKAGE_NAME', 'gnome-builder')
 conf.set_quoted('PACKAGE_VERSION', meson.project_version())
@@ -122,9 +129,61 @@ configure_file(
 libgio_dep = dependency('gio-2.0', version: '>= 2.50.0')
 libgiounix_dep = dependency('gio-unix-2.0')
 libgtk_dep = dependency('gtk+-3.0', version: '>= 3.22.1')
-libpeas_dep = dependency('libpeas-1.0', version: '>= 1.18.0')
+libpeas_dep = dependency('libpeas-1.0', version: '>= 1.21.0')
 libm_dep = cc.find_library('m', required: false)
 libjson_glib_dep = dependency('json-glib-1.0', version: '>= 1.2.0')
+libdazzle_dep = dependency('libdazzle-1.0', version: '>= 0.1.0', required: false)
+libtemplate_glib_dep = dependency('template-glib-1.0', version: '>= 3.25.2', required: false)
+libjsonrpc_glib_dep = dependency('jsonrpc-glib-1.0', version: '>= 3.25.2',
+  fallback: ['jsonrpc-glib', 'libjsonrpc_glib_dep'],
+  default_options: [
+    'with_introspection=false',
+    'with_vapi=false',
+    'package_subdir=' + meson.project_name()
+  ],
+)
+
+libtemplate_glib_gir = 'Template-1.0'
+libtemplate_glib_vapi = 'template-glib-1.0'
+if not libtemplate_glib_dep.found()
+  libtemplate_glib = subproject('template-glib',
+    default_options: [
+      'with_introspection=true',
+      'with_vapi=true',
+      'package_subdir=' + meson.project_name()
+    ]
+  )
+  libtemplate_glib_dep = libtemplate_glib.get_variable('libtemplate_glib_dep')
+  libtemplate_glib_gir = libtemplate_glib.get_variable('libtemplate_glib_gir')[0]
+  libtemplate_glib_vapi = libtemplate_glib.get_variable('libtemplate_glib_vapi')
+endif
+
+libdazzle_gir = 'Dazzle-1.0'
+libdazzle_vapi = 'libdazzle-1.0'
+libdazzle_bundled = false
+if not libdazzle_dep.found()
+  libdazzle = subproject('libdazzle',
+    default_options: [
+      'with_introspection=true',
+      'with_vapi=true',
+      'package_subdir=' + meson.project_name()
+    ]
+  )
+  libdazzle_dep = libdazzle.get_variable('libdazzle_dep')
+  libdazzle_gir = libdazzle.get_variable('libdazzle_gir')[0]
+  libdazzle_vapi = libdazzle.get_variable('libdazzle_vapi')
+  libdazzle_bundled = true
+endif
+
+
+libgd = subproject('libgd',
+  default_options: [
+    'static=false',
+    'pkglibdir=' + pkglibdir,
+    'with-tagged-entry=true'
+  ]
+)
+libgd_dep = libgd.get_variable('libgd_dep')
 
 if get_option('with_flatpak') or get_option('with_git')
   libgit_dep = dependency('libgit2-glib-1.0', version: '>= 0.25.0')
@@ -160,12 +219,6 @@ if get_option('with_flatpak') or get_option('with_git')
   endif
 endif
 
-
-pkglibdir_abs = join_paths(get_option('prefix'), get_option('libdir'), 'gnome-builder')
-pkglibdir = join_paths(get_option('libdir'), 'gnome-builder')
-pkggirdir = join_paths(get_option('datadir'),'gnome-builder', 'gir-1.0')
-pkgtypelibdir = join_paths(get_option('libdir'), 'gnome-builder', 'girepository-1.0')
-pkgvapidir = join_paths(get_option('datadir'), 'gnome-builder/vapi')
 gnome = import('gnome')
 
 subdir('data')
@@ -173,22 +226,14 @@ subdir('data/fonts')
 subdir('data/gsettings')
 subdir('data/icons')
 subdir('data/style-schemes')
-subdir('contrib/egg')
-subdir('contrib/gd')
-subdir('contrib/jsonrpc-glib')
 subdir('contrib/libeditorconfig')
 subdir('contrib/nautilus')
-subdir('contrib/pnl')
-subdir('contrib/rg')
-subdir('contrib/search')
-subdir('contrib/tmpl')
 subdir('contrib/xml')
-subdir('contrib/gstyle') # Depends on libsearch/libxml
+subdir('contrib/gstyle') # Depends on libxml
 subdir('libide')
 subdir('plugins')
 subdir('po')
 subdir('tests')
-subdir('tools')
 
 exe_link_args = [
   '-pie',
@@ -225,12 +270,12 @@ executable('gnome-builder-worker', 'src/main.c',
   dependencies: libide_deps + [libide_dep],
 )
 
-meson.add_install_script('build/meson/meson_post_install.py')
+meson.add_install_script('build-aux/meson/meson_post_install.py')
 
 # 'dist' will be used by meson, avoid conflicting
 run_target('builder-dist',
   command: [
-    find_program('build/meson/meson_dist.sh'),
+    find_program('build-aux/meson/meson_dist.sh'),
     meson.project_version(),
     meson.project_name(),
   ]

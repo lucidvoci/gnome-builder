@@ -27,7 +27,7 @@ typedef struct
   gulong     focus_handler;
 } IdeLayoutPrivate;
 
-G_DEFINE_TYPE_WITH_PRIVATE (IdeLayout, ide_layout, PNL_TYPE_DOCK_BIN)
+G_DEFINE_TYPE_WITH_PRIVATE (IdeLayout, ide_layout, DZL_TYPE_DOCK_BIN)
 
 enum {
   PROP_0,
@@ -133,7 +133,7 @@ ide_layout_hierarchy_changed (GtkWidget *widget,
 }
 
 static GtkWidget *
-ide_layout_create_edge (PnlDockBin *dock)
+ide_layout_create_edge (DzlDockBin *dock)
 {
   g_assert (IDE_IS_LAYOUT (dock));
 
@@ -167,15 +167,13 @@ ide_layout_class_init (IdeLayoutClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
   GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
-  PnlDockBinClass *dock_bin_class = PNL_DOCK_BIN_CLASS (klass);
+  DzlDockBinClass *dock_bin_class = DZL_DOCK_BIN_CLASS (klass);
 
   object_class->get_property = ide_layout_get_property;
 
   widget_class->hierarchy_changed = ide_layout_hierarchy_changed;
 
   dock_bin_class->create_edge = ide_layout_create_edge;
-
-  gtk_widget_class_set_css_name (widget_class, "layout");
 
   properties [PROP_ACTIVE_VIEW] =
     g_param_spec_object ("active-view",

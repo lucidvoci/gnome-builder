@@ -19,10 +19,10 @@
 #ifndef IDE_APPLICATION_H
 #define IDE_APPLICATION_H
 
+#include <dazzle.h>
 #include <gtk/gtk.h>
 
 #include "projects/ide-recent-projects.h"
-#include "util/ide-directory-reaper.h"
 
 G_BEGIN_DECLS
 
@@ -30,7 +30,7 @@ G_BEGIN_DECLS
 #define IDE_APPLICATION_DEFAULT (IDE_APPLICATION (g_application_get_default()))
 #define IDE_IS_MAIN_THREAD()    (g_thread_self() == ide_application_get_main_thread())
 
-G_DECLARE_FINAL_TYPE (IdeApplication, ide_application, IDE, APPLICATION, GtkApplication)
+G_DECLARE_FINAL_TYPE (IdeApplication, ide_application, IDE, APPLICATION, DzlApplication)
 
 typedef enum
 {
@@ -55,12 +55,10 @@ void                ide_application_get_worker_async     (IdeApplication       *
 GDBusProxy         *ide_application_get_worker_finish    (IdeApplication       *self,
                                                           GAsyncResult         *result,
                                                           GError              **error);
-GMenu              *ide_application_get_menu_by_id       (IdeApplication       *self,
-                                                          const gchar          *id);
 gboolean            ide_application_open_project         (IdeApplication       *self,
                                                           GFile                *file);
 void                ide_application_add_reaper           (IdeApplication       *self,
-                                                          IdeDirectoryReaper   *reaper);
+                                                          DzlDirectoryReaper   *reaper);
 
 G_END_DECLS
 

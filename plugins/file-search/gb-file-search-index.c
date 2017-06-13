@@ -18,19 +18,19 @@
 
 #define G_LOG_DOMAIN "gb-file-search-index"
 
-#include <fuzzy.h>
 #include <glib/gi18n.h>
 #include <ide.h>
+#include <string.h>
 
 #include "gb-file-search-index.h"
 #include "gb-file-search-result.h"
 
 struct _GbFileSearchIndex
 {
-  IdeObject     parent_instance;
+  IdeObject             parent_instance;
 
-  GFile        *root_directory;
-  Fuzzy        *fuzzy;
+  GFile                *root_directory;
+  DzlFuzzyMutableIndex *fuzzy;
 };
 
 G_DEFINE_TYPE (GbFileSearchIndex, gb_file_search_index, IDE_TYPE_OBJECT)
@@ -52,7 +52,7 @@ gb_file_search_index_set_root_directory (GbFileSearchIndex *self,
 
   if (g_set_object (&self->root_directory, root_directory))
     {
-      g_clear_pointer (&self->fuzzy, fuzzy_unref);
+      g_clear_pointer (&self->fuzzy, dzl_fuzzy_mutable_index_unref);
 
       g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_ROOT_DIRECTORY]);
     }
@@ -64,7 +64,7 @@ gb_file_search_index_finalize (GObject *object)
   GbFileSearchIndex *self = (GbFileSearchIndex *)object;
 
   g_clear_object (&self->root_directory);
-  g_clear_pointer (&self->fuzzy, fuzzy_unref);
+  g_clear_pointer (&self->fuzzy, dzl_fuzzy_mutable_index_unref);
 
   G_OBJECT_CLASS (gb_file_search_index_parent_class)->finalize (object);
 }
@@ -132,11 +132,11 @@ gb_file_search_index_init (GbFileSearchIndex *self)
 }
 
 static void
-populate_from_dir (Fuzzy        *fuzzy,
-                   IdeVcs       *vcs,
-                   const gchar  *relpath,
-                   GFile        *directory,
-                   GCancellable *cancellable)
+populate_from_dir (DzlFuzzyMutableIndex *fuzzy,
+                   IdeVcs               *vcs,
+                   const gchar          *relpath,
+                   GFile                *directory,
+                   GCancellable         *cancellable)
 {
   GFileEnumerator *enumerator;
   GPtrArray *children = NULL;
@@ -183,7 +183,7 @@ populate_from_dir (Fuzzy        *fuzzy,
       if (relpath != NULL)
         name = path = g_build_filename (relpath, name, NULL);
 
-      fuzzy_insert (fuzzy, name, NULL);
+      dzl_fuzzy_mutable_index_insert (fuzzy, name, NULL);
     }
 
   g_clear_object (&enumerator);
@@ -222,7 +222,7 @@ gb_file_search_index_builder (GTask        *task,
   GFile *directory = task_data;
   IdeContext *context;
   IdeVcs *vcs;
-  Fuzzy *fuzzy;
+  DzlFuzzyMutableIndex *fuzzy;
   gdouble elapsed;
 
   g_assert (G_IS_TASK (task));
@@ -235,10 +235,10 @@ gb_file_search_index_builder (GTask        *task,
 
   timer = g_timer_new ();
 
-  fuzzy = fuzzy_new (FALSE);
-  fuzzy_begin_bulk_insert (fuzzy);
+  fuzzy = dzl_fuzzy_mutable_index_new (FALSE);
+  dzl_fuzzy_mutable_index_begin_bulk_insert (fuzzy);
   populate_from_dir (fuzzy, vcs, NULL, directory, cancellable);
-  fuzzy_end_bulk_insert (fuzzy);
+  dzl_fuzzy_mutable_index_end_bulk_insert (fuzzy);
 
   self->fuzzy = fuzzy;
 
@@ -262,6 +262,8 @@ gb_file_search_index_build_async (GbFileSearchIndex   *self,
   g_return_if_fail (!cancellable || G_IS_CANCELLABLE (cancellable));
 
   task = g_task_new (self, cancellable, callback, user_data);
+  g_task_set_source_tag (task, gb_file_search_index_build_async);
+  g_task_set_priority (task, G_PRIORITY_LOW);
 
   if (self->root_directory == NULL)
     {
@@ -290,31 +292,27 @@ gb_file_search_index_build_finish (GbFileSearchIndex  *self,
   return g_task_propagate_boolean (task, error);
 }
 
-void
+GPtrArray *
 gb_file_search_index_populate (GbFileSearchIndex *self,
-                               IdeSearchContext  *context,
-                               IdeSearchProvider *provider,
-                               const gchar       *query)
+                               const gchar       *query,
+                               gsize              max_results)
 {
-  g_autoptr(GArray) ar = NULL;
   g_auto(IdeSearchReducer) reducer = { 0 };
   g_autoptr(GString) delimited = NULL;
+  g_autoptr(GArray) ar = NULL;
   const gchar *iter = query;
-  IdeContext *icontext;
-  gsize max_matches;
+  IdeContext *context;
   gsize i;
 
-  g_return_if_fail (GB_IS_FILE_SEARCH_INDEX (self));
-  g_return_if_fail (IDE_IS_SEARCH_CONTEXT (context));
-  g_return_if_fail (IDE_IS_SEARCH_PROVIDER (provider));
-  g_return_if_fail (query != NULL);
+  g_return_val_if_fail (GB_IS_FILE_SEARCH_INDEX (self), NULL);
+  g_return_val_if_fail (query != NULL, NULL);
 
   if (self->fuzzy == NULL)
-    return;
+    return g_ptr_array_new_with_free_func (g_object_unref);
 
-  icontext = ide_object_get_context (IDE_OBJECT (provider));
-  max_matches = ide_search_context_get_max_results (context);
-  ide_search_reducer_init (&reducer, context, provider, max_matches);
+  context = ide_object_get_context (IDE_OBJECT (self));
+
+  ide_search_reducer_init (&reducer, max_results);
 
   delimited = g_string_new (NULL);
 
@@ -326,30 +324,45 @@ gb_file_search_index_populate (GbFileSearchIndex *self,
         g_string_append_unichar (delimited, ch);
     }
 
-  ar = fuzzy_match (self->fuzzy, delimited->str, max_matches);
+  ar = dzl_fuzzy_mutable_index_match (self->fuzzy, delimited->str, max_results);
 
   for (i = 0; i < ar->len; i++)
     {
-      FuzzyMatch *match;
-
-      match = &g_array_index (ar, FuzzyMatch, i);
+      const DzlFuzzyMutableIndexMatch *match = &g_array_index (ar, DzlFuzzyMutableIndexMatch, i);
 
       if (ide_search_reducer_accepts (&reducer, match->score))
         {
           g_autoptr(GbFileSearchResult) result = NULL;
+          g_autofree gchar *escaped = NULL;
           g_autofree gchar *markup = NULL;
+          g_autofree gchar *free_me = NULL;
+          const gchar *filename = match->key;
+          const gchar *icon_name = "text-x-generic-symbolic";
+          const gchar *content_type;
 
-          markup = ide_completion_item_fuzzy_highlight (match->key, delimited->str);
+          escaped = g_markup_escape_text (match->key, -1);
+          markup = dzl_fuzzy_highlight (escaped, delimited->str, FALSE);
+
+          /*
+           * Try to get a more appropriate icon, but by filename only.
+           * Sniffing would be way too slow here.
+           */
+          content_type = g_content_type_guess (filename, NULL, 0, NULL);
+          if (content_type != NULL)
+            icon_name = free_me = g_content_type_get_generic_icon_name (content_type);
+
           result = g_object_new (GB_TYPE_FILE_SEARCH_RESULT,
-                                 "context", icontext,
-                                 "provider", provider,
+                                 "context", context,
+                                 "icon-name", icon_name,
                                  "score", match->score,
                                  "title", markup,
-                                 "path", match->key,
+                                 "path", filename,
                                  NULL);
-          ide_search_reducer_push (&reducer, IDE_SEARCH_RESULT (result));
+          ide_search_reducer_take (&reducer, g_steal_pointer (&result));
         }
     }
+
+  return ide_search_reducer_free (&reducer, FALSE);
 }
 
 gboolean
@@ -360,7 +373,7 @@ gb_file_search_index_contains (GbFileSearchIndex *self,
   g_return_val_if_fail (relative_path != NULL, FALSE);
   g_return_val_if_fail (self->fuzzy != NULL, FALSE);
 
-  return fuzzy_contains (self->fuzzy, relative_path);
+  return dzl_fuzzy_mutable_index_contains (self->fuzzy, relative_path);
 }
 
 void
@@ -371,7 +384,7 @@ gb_file_search_index_insert (GbFileSearchIndex *self,
   g_return_if_fail (relative_path != NULL);
   g_return_if_fail (self->fuzzy != NULL);
 
-  fuzzy_insert (self->fuzzy, relative_path, NULL);
+  dzl_fuzzy_mutable_index_insert (self->fuzzy, relative_path, NULL);
 }
 
 void
@@ -382,5 +395,5 @@ gb_file_search_index_remove (GbFileSearchIndex *self,
   g_return_if_fail (relative_path != NULL);
   g_return_if_fail (self->fuzzy != NULL);
 
-  fuzzy_remove (self->fuzzy, relative_path);
+  dzl_fuzzy_mutable_index_remove (self->fuzzy, relative_path);
 }

@@ -18,7 +18,7 @@
 
 #define G_LOG_DOMAIN "ide-layout-tab"
 
-#include <egg-priority-box.h>
+#include <dazzle.h>
 
 #include "ide-macros.h"
 
@@ -230,7 +230,7 @@ ide_layout_tab_class_init (IdeLayoutTabClass *klass)
   gtk_widget_class_bind_template_child (widget_class, IdeLayoutTab, title_label);
   gtk_widget_class_bind_template_child (widget_class, IdeLayoutTab, title_menu_button);
 
-  g_type_ensure (EGG_TYPE_PRIORITY_BOX);
+  g_type_ensure (DZL_TYPE_PRIORITY_BOX);
 }
 
 static void
@@ -243,7 +243,7 @@ ide_layout_tab_init (IdeLayoutTab *self)
 
   gtk_widget_add_events (GTK_WIDGET (self), GDK_ENTER_NOTIFY | GDK_LEAVE_NOTIFY);
 
-  menu = ide_application_get_menu_by_id (IDE_APPLICATION_DEFAULT, "ide-layout-stack-menu");
+  menu = dzl_application_get_menu_by_id (DZL_APPLICATION_DEFAULT, "ide-layout-stack-menu");
   popover = gtk_popover_new_from_model (self->title_menu_button, G_MENU_MODEL (menu));
   gtk_menu_button_set_popover (GTK_MENU_BUTTON (self->title_menu_button), popover);
 }
