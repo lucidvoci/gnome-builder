@@ -20,6 +20,7 @@
 
 #include <devhelp/devhelp.h>
 #include <libxml/xmlreader.h>
+#include "gbp-devhelp-documentation-card.h"
 #include "gbp-devhelp-editor-view-addin.h"
 #include "gbp-devhelp-panel.h"
 
@@ -27,10 +28,11 @@ struct _GbpDevhelpEditorViewAddin
 {
   GObject         parent_instance;
   IdeEditorView  *editor_view;
+  GbpDevhelpDocumentationCard     *popover;
   DhBookManager  *books;
 
   gchar          *previous_text;
-  gchar          *tooltip_text;
+  gchar          *doc_text;
 };
 
 static void iface_init (IdeEditorViewAddinInterface *iface);
@@ -162,28 +164,29 @@ xml_parse (gchar *file_name,
 }
 
 static gboolean
-query_tooltip_cb (GbpDevhelpEditorViewAddin *self,
-                  gint                       x,
-                  gint                       y,
-                  gboolean                   keyboard_tooltip,
-                  GtkTooltip                *tooltip,
-                  GtkWidget                 *widget)
+motion_notify_event_cb (GbpDevhelpEditorViewAddin *self,
+                        GdkEventMotion            *motion,
+                        GtkWidget                 *widget)
 {
+  GdkRectangle rec;
   GtkTextBuffer *buffer;
   IdeSourceView *source_view;
   GtkSourceLanguage *lang;
+  GdkWindow *window;
+  GdkSeat *seat;
+  GdkDisplay *display;
+  GdkDevice *device;
+  GtkTextIter pointer;
   GtkTextIter begin;
   GtkTextIter end;
   DhKeywordModel *keyword_model;
   DhLink *link;
   const gchar *selected_text;
   const gchar *uri;
-  // const gchar *book_name = NULL;
+  const gchar *book_name;
   gchar **tokens;
-
-  g_assert (GTK_IS_WIDGET (widget));
-  g_assert (GBP_IS_DEVHELP_EDITOR_VIEW_ADDIN (self));
-  g_assert (GTK_IS_TOOLTIP (tooltip));
+  gint u, v;
+  gint x, y;
 
   source_view = ide_editor_view_get_active_source_view (self->editor_view);
   if (source_view == NULL || !GTK_SOURCE_IS_VIEW (source_view))
@@ -197,9 +200,19 @@ query_tooltip_cb (GbpDevhelpEditorViewAddin *self,
   if (lang == NULL || !ide_str_equal0 (gtk_source_language_get_id(lang), "c"))
     return FALSE;
 
-  gtk_text_view_window_to_buffer_coords (GTK_TEXT_VIEW (source_view), GTK_TEXT_WINDOW_WIDGET, x, y, &x, &y);
-  gtk_text_view_get_iter_at_location (GTK_TEXT_VIEW (source_view), &begin, x, y);
+  window = gtk_widget_get_parent_window (widget);
+  display = gdk_window_get_display (window);
+  seat = gdk_display_get_default_seat (display);
+  device = gdk_seat_get_pointer (seat);
+
+  gdk_window_get_device_position (window, device, &u, &v, NULL);
+  gtk_text_view_get_iter_at_location (GTK_TEXT_VIEW (source_view), &pointer, u, v);
+  gtk_text_view_get_iter_location (GTK_TEXT_VIEW (source_view), &pointer, &rec);
+
+  gtk_text_view_window_to_buffer_coords (GTK_TEXT_VIEW (source_view), GTK_TEXT_WINDOW_WIDGET, u, v, &x, &y);
   gtk_text_view_get_iter_at_location (GTK_TEXT_VIEW (source_view), &end, x, y);
+  gtk_text_view_get_iter_at_location (GTK_TEXT_VIEW (source_view), &begin, x, y);
+
 
   while (g_unichar_isalpha(gtk_text_iter_get_char (&begin)) || gtk_text_iter_get_char (&begin) == '_')
     gtk_text_iter_backward_char (&begin);
@@ -208,24 +221,26 @@ query_tooltip_cb (GbpDevhelpEditorViewAddin *self,
   while (g_unichar_isalpha(gtk_text_iter_get_char (&end)) || gtk_text_iter_get_char (&end) == '_')
     gtk_text_iter_forward_char (&end);
 
+
   selected_text = gtk_text_buffer_get_text (buffer, &begin, &end, FALSE);
   if (selected_text == NULL || g_strcmp0 (selected_text, "") == 0)
-    return FALSE;
-
+    {
+      gtk_popover_popdown (GTK_POPOVER (self->popover));
+      return FALSE;
+    }
   if (g_strcmp0 (self->previous_text, selected_text) != 0)
     {
+      gtk_popover_popdown (GTK_POPOVER (self->popover));
       keyword_model = dh_keyword_model_new ();
       link = dh_keyword_model_filter (keyword_model, selected_text, NULL, NULL);
       if (link == NULL)
         return FALSE;
 
       uri = dh_link_get_uri (link);
-      // book_name = dh_link_get_book_name (link);
+      book_name = dh_link_get_book_name (link);
       tokens = g_strsplit (uri, "#", -1 );
       if (tokens == NULL)
-        {
           return FALSE;
-        }
 
       if (g_strv_length (tokens) != 2)
         {
@@ -233,20 +248,21 @@ query_tooltip_cb (GbpDevhelpEditorViewAddin *self,
           return FALSE;
         }
 
-      g_free (self->tooltip_text);
-      self->tooltip_text = xml_parse (tokens[0], tokens[1]);
+      g_free (self->doc_text);
+      self->doc_text = xml_parse (tokens[0], tokens[1]);
       g_strfreev (tokens);
-      if (g_strcmp0 (self->tooltip_text, "") == 0)
+      if (g_strcmp0 (self->doc_text, "") == 0)
         return FALSE;
 
       g_free (self->previous_text);
       self->previous_text = g_strdup (selected_text);
+
+      gtk_popover_set_pointing_to (GTK_POPOVER (self->popover), &rec);
+      gbp_devhelp_documentation_card_set_text (self->popover, "Documentation Card", self->doc_text);
+      gtk_popover_popup (GTK_POPOVER (self->popover));
     }
 
-  gtk_tooltip_set_text (tooltip, self->tooltip_text);
-
   return TRUE;
-
 }
 
 static void
@@ -261,6 +277,11 @@ gbp_devhelp_editor_view_addin_load (IdeEditorViewAddin *addin,
   self = GBP_DEVHELP_EDITOR_VIEW_ADDIN (addin);
   self->editor_view = view;
   self->books = dh_book_manager_get_singleton ();
+  self->popover = g_object_new (GBP_TYPE_DEVHELP_DOCUMENTATION_CARD,
+                                "relative-to", GTK_WIDGET (view),
+                                "position", GTK_POS_TOP,
+                                "modal", FALSE,
+                                NULL);
 
   g_signal_connect_object (view,
                            "request-documentation",
@@ -269,12 +290,11 @@ gbp_devhelp_editor_view_addin_load (IdeEditorViewAddin *addin,
                            G_CONNECT_SWAPPED);
 
   g_signal_connect_object (view,
-                           "query-tooltip",
-                           G_CALLBACK (query_tooltip_cb),
-                           addin,
+                           "motion-notify-event",
+                           G_CALLBACK (motion_notify_event_cb),
+                           self,
                            G_CONNECT_SWAPPED);
 
-  gtk_widget_set_has_tooltip (GTK_WIDGET (view), TRUE);
 }
 
 static void

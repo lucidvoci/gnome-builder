@@ -25,7 +25,11 @@ G_BEGIN_DECLS
 
 #define GBP_TYPE_DEVHELP_DOCUMENTATION_CARD (gbp_devhelp_documentation_card_get_type())
 
-G_DECLARE_FINAL_TYPE (GbpDevhelpDocumentationCard, gbp_devhelp_documentation_card, GBP, DEVHELP_DOCUMENTATION_CARD, GtkBin)
+G_DECLARE_FINAL_TYPE (GbpDevhelpDocumentationCard, gbp_devhelp_documentation_card, GBP, DEVHELP_DOCUMENTATION_CARD, GtkPopover)
+
+void gbp_devhelp_documentation_card_set_text (GbpDevhelpDocumentationCard *self,
+                                              gchar                       *title,
+                                              gchar                       *text);
 
 G_END_DECLS
 

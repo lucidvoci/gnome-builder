@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <!-- interface-requires gtk+ 3.16 -->
+  <template class="GbpDevhelpDocumentationCard" parent="GtkPopover">
+    <child>
+      <object class="GtkBox">
+        <property name="border-width">12</property>
+        <property name="orientation">vertical</property>
+        <property name="spacing">6</property>
+        <property name="visible">true</property>
+        <child>
+          <object class="GtkLabel" id="title">
+            <property name="xalign">0.0</property>
+            <property name="visible">true</property>
+            <attributes>
+              <attribute name="weight" value="bold"/>
+            </attributes>
+          </object>
+        </child>
+        <child>
+          <object class="GtkLabel" id="message">
+            <property name="xalign">0.0</property>
+            <property name="visible">true</property>
+            <style>
+              <class name="dim-label"/>
+            </style>
+          </object>
+        </child>
+      </object>
+    </child>
+  </template>
+</interface>
