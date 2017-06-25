@@ -29,10 +29,9 @@ struct _GbpDevhelpEditorViewAddin
   GObject         parent_instance;
   IdeEditorView  *editor_view;
   GbpDevhelpDocumentationCard     *popover;
-  DhBookManager  *books;
+  DhKeywordModel *keyword_model;
 
   gchar          *previous_text;
-  gchar          *doc_text;
 };
 
 static void iface_init (IdeEditorViewAddinInterface *iface);
@@ -61,131 +60,26 @@ request_documentation_cb (GbpDevhelpEditorViewAddin *self,
   gbp_devhelp_panel_focus_search (GBP_DEVHELP_PANEL (panel), word);
 }
 
-static gchar *
-remove_tags (gchar *source_html)
-{
-  GString *text = g_string_new (NULL);
-  gboolean in_tag = FALSE;
-  gboolean white_sym = FALSE;
-
-  while (*source_html)
-    {
-      gunichar ch = g_utf8_get_char (source_html);
-      if (ch == '<')
-        in_tag = TRUE;
-      else if (ch == '>')
-        {
-          in_tag = FALSE;
-          if (!white_sym)
-              white_sym = TRUE;
-        }
-      else if (g_unichar_isspace (ch) && !white_sym)
-          white_sym = TRUE;
-      else if (!in_tag && !g_unichar_isspace (ch))
-        {
-          if (white_sym && ch != ',')
-            g_string_append_unichar (text, ' ');
-          white_sym = FALSE;
-          g_string_append_unichar (text, ch);
-        }
-      source_html = g_utf8_next_char (source_html);
-    }
-
-  return g_string_free (text, FALSE);
-}
-
-static gchar *
-xml_parse (gchar *file_name,
-           gchar *func_name)
-{
-  GFileInputStream *file_stream;
-  GDataInputStream *data_stream;
-  GString *source = g_string_new (NULL);
-  GError *error = NULL;
-  GMatchInfo *match_info;
-  GRegex *regex;
-  GRegex *regex_start;
-  GRegex *regex_end;
-  const gchar *regex_char;
-  gchar *line;
-  gchar *line_start;
-  gchar *line_end;
-  gboolean found_tag = FALSE;
-  gboolean start_tag = FALSE;
-
-  file_stream = g_file_read (g_file_new_for_uri (file_name), NULL, &error);
-  if (file_stream == NULL)
-    return g_string_free (source, FALSE);
-
-  regex_char = g_strdup_printf ("name=\"%s\"", func_name);
-  regex = g_regex_new (regex_char, 0, 0, NULL);
-  regex_start = g_regex_new (".*<pre.*?>", 0, 0, NULL);
-  regex_end = g_regex_new ("</pre.*", 0, 0, NULL);
-
-  data_stream = g_data_input_stream_new (G_INPUT_STREAM (file_stream));
-
-  while (TRUE)
-    {
-      line = g_data_input_stream_read_line_utf8 (data_stream, NULL, NULL, &error);
-      if (error != NULL || line == NULL)
-        return g_string_free (source, FALSE);
-
-      if (!found_tag)
-        {
-	        g_regex_match (regex, line, 0, &match_info);
-          if (g_match_info_matches (match_info))
-            found_tag = TRUE;
-        }
-      if (found_tag && !start_tag)
-        {
-          g_regex_match (regex_start, line, 0, &match_info);
-          if (g_match_info_matches (match_info))
-            {
-              start_tag = TRUE;
-              line_start = g_regex_replace (regex_start, line, -1, 0, "", 0, NULL);
-              g_free (line);
-              line = line_start;
-            }
-        }
-      if (found_tag && start_tag)
-        {
-          g_regex_match (regex_end, line, 0, &match_info);
-          if (g_match_info_matches (match_info))
-            {
-              line_end = g_regex_replace (regex_end, line, -1, 0, "", 0, NULL);
-              g_string_append (source, line_end);
-              break;
-            }
-          g_string_append (source, line);
-        }
-    }
-
-  return remove_tags (g_string_free (source, FALSE));
-}
-
 static gboolean
-motion_notify_event_cb (GbpDevhelpEditorViewAddin *self,
-                        GdkEventMotion            *motion,
-                        GtkWidget                 *widget)
+motion_notify_event_cb (gpointer data)
 {
-  GdkRectangle rec;
+  GbpDevhelpEditorViewAddin *self = GBP_DEVHELP_EDITOR_VIEW_ADDIN  (data);
   GtkTextBuffer *buffer;
   IdeSourceView *source_view;
   GtkSourceLanguage *lang;
-  GdkWindow *window;
-  GdkSeat *seat;
+
   GdkDisplay *display;
+  GdkWindow *window;
   GdkDevice *device;
-  GtkTextIter pointer;
+
   GtkTextIter begin;
   GtkTextIter end;
-  DhKeywordModel *keyword_model;
+
   DhLink *link;
   const gchar *selected_text;
   const gchar *uri;
   const gchar *book_name;
   gchar **tokens;
-  gint u, v;
   gint x, y;
 
   source_view = ide_editor_view_get_active_source_view (self->editor_view);
@@ -200,39 +94,33 @@ motion_notify_event_cb (GbpDevhelpEditorViewAddin *self,
   if (lang == NULL || !ide_str_equal0 (gtk_source_language_get_id(lang), "c"))
     return FALSE;
 
-  window = gtk_widget_get_parent_window (widget);
+  window = gtk_widget_get_parent_window (GTK_WIDGET (self->editor_view));
   display = gdk_window_get_display (window);
-  seat = gdk_display_get_default_seat (display);
-  device = gdk_seat_get_pointer (seat);
+  device = gdk_seat_get_pointer (gdk_display_get_default_seat (display));
 
-  gdk_window_get_device_position (window, device, &u, &v, NULL);
-  gtk_text_view_get_iter_at_location (GTK_TEXT_VIEW (source_view), &pointer, u, v);
-  gtk_text_view_get_iter_location (GTK_TEXT_VIEW (source_view), &pointer, &rec);
-
-  gtk_text_view_window_to_buffer_coords (GTK_TEXT_VIEW (source_view), GTK_TEXT_WINDOW_WIDGET, u, v, &x, &y);
+  gdk_window_get_device_position (window, device, &x, &y, NULL);
+  gtk_text_view_window_to_buffer_coords (GTK_TEXT_VIEW (source_view), GTK_TEXT_WINDOW_WIDGET, x, y, &x, &y);
   gtk_text_view_get_iter_at_location (GTK_TEXT_VIEW (source_view), &end, x, y);
   gtk_text_view_get_iter_at_location (GTK_TEXT_VIEW (source_view), &begin, x, y);
 
-
-  while (g_unichar_isalpha(gtk_text_iter_get_char (&begin)) || gtk_text_iter_get_char (&begin) == '_')
+  while (g_unichar_isalpha(gtk_text_iter_get_char (&begin)) || g_unichar_isdigit(gtk_text_iter_get_char (&begin)) || gtk_text_iter_get_char (&begin) == '_')
     gtk_text_iter_backward_char (&begin);
   gtk_text_iter_forward_char (&begin);
 
-  while (g_unichar_isalpha(gtk_text_iter_get_char (&end)) || gtk_text_iter_get_char (&end) == '_')
+  while (g_unichar_isalpha(gtk_text_iter_get_char (&end)) || g_unichar_isdigit (gtk_text_iter_get_char (&end)) || gtk_text_iter_get_char (&end) == '_')
     gtk_text_iter_forward_char (&end);
 
-
   selected_text = gtk_text_buffer_get_text (buffer, &begin, &end, FALSE);
-  if (selected_text == NULL || g_strcmp0 (selected_text, "") == 0)
+  if (selected_text == NULL || g_strcmp0 (selected_text, "") == 0 )
     {
-      gtk_popover_popdown (GTK_POPOVER (self->popover));
+      self->previous_text = "";
+      gbp_devhelp_documentation_card_popdown (self->popover);
       return FALSE;
     }
   if (g_strcmp0 (self->previous_text, selected_text) != 0)
     {
-      gtk_popover_popdown (GTK_POPOVER (self->popover));
-      keyword_model = dh_keyword_model_new ();
-      link = dh_keyword_model_filter (keyword_model, selected_text, NULL, NULL);
+      gbp_devhelp_documentation_card_popdown (self->popover);
+      link = dh_keyword_model_filter (self->keyword_model, selected_text, NULL, NULL);
       if (link == NULL)
         return FALSE;
 
@@ -248,21 +136,15 @@ motion_notify_event_cb (GbpDevhelpEditorViewAddin *self,
           return FALSE;
         }
 
-      g_free (self->doc_text);
-      self->doc_text = xml_parse (tokens[0], tokens[1]);
+      gbp_devhelp_documentation_card_set_text (self->popover, tokens[0], tokens[1]);
       g_strfreev (tokens);
-      if (g_strcmp0 (self->doc_text, "") == 0)
-        return FALSE;
 
       g_free (self->previous_text);
       self->previous_text = g_strdup (selected_text);
-
-      gtk_popover_set_pointing_to (GTK_POPOVER (self->popover), &rec);
-      gbp_devhelp_documentation_card_set_text (self->popover, "Documentation Card", self->doc_text);
-      gtk_popover_popup (GTK_POPOVER (self->popover));
     }
 
-  return TRUE;
+  gbp_devhelp_documentation_card_popup (self->popover);
+  return FALSE;
 }
 
 static void
@@ -276,10 +158,10 @@ gbp_devhelp_editor_view_addin_load (IdeEditorViewAddin *addin,
 
   self = GBP_DEVHELP_EDITOR_VIEW_ADDIN (addin);
   self->editor_view = view;
-  self->books = dh_book_manager_get_singleton ();
+  self->keyword_model = dh_keyword_model_new ();
   self->popover = g_object_new (GBP_TYPE_DEVHELP_DOCUMENTATION_CARD,
                                 "relative-to", GTK_WIDGET (view),
-                                "position", GTK_POS_TOP,
+                                "position", GTK_POS_BOTTOM,
                                 "modal", FALSE,
                                 NULL);
 
