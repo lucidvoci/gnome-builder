@@ -76,10 +76,9 @@ motion_notify_event_cb (gpointer data)
   GtkTextIter end;
 
   DhLink *link;
-  const gchar *selected_text;
-  const gchar *uri;
+  gchar *selected_text;
+  gchar *uri;
   const gchar *book_name;
-  gchar **tokens;
   gint x, y;
 
   source_view = ide_editor_view_get_active_source_view (self->editor_view);
@@ -111,9 +110,9 @@ motion_notify_event_cb (gpointer data)
     gtk_text_iter_forward_char (&end);
 
   selected_text = gtk_text_buffer_get_text (buffer, &begin, &end, FALSE);
-  if (selected_text == NULL || g_strcmp0 (selected_text, "") == 0 )
+  if (selected_text == NULL || gtk_text_iter_get_offset (&end) - gtk_text_iter_get_offset (&begin) <= 1)
     {
-      self->previous_text = "";
+      self->previous_text = NULL;
       gbp_devhelp_documentation_card_popdown (self->popover);
       return FALSE;
     }
@@ -126,18 +125,9 @@ motion_notify_event_cb (gpointer data)
 
       uri = dh_link_get_uri (link);
       book_name = dh_link_get_book_name (link);
-      tokens = g_strsplit (uri, "#", -1 );
-      if (tokens == NULL)
-          return FALSE;
 
-      if (g_strv_length (tokens) != 2)
-        {
-          g_strfreev (tokens);
-          return FALSE;
-        }
-
-      gbp_devhelp_documentation_card_set_text (self->popover, tokens[0], tokens[1]);
-      g_strfreev (tokens);
+      if (!gbp_devhelp_documentation_card_set_text (self->popover, uri, book_name))
+        return FALSE;
 
       g_free (self->previous_text);
       self->previous_text = g_strdup (selected_text);

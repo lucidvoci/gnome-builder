@@ -27,11 +27,11 @@ G_BEGIN_DECLS
 
 G_DECLARE_FINAL_TYPE (GbpDevhelpDocumentationCard, gbp_devhelp_documentation_card, GBP, DEVHELP_DOCUMENTATION_CARD, GtkPopover)
 
-void gbp_devhelp_documentation_card_set_text (GbpDevhelpDocumentationCard *self,
-                                              gchar                       *title,
-                                              gchar                       *text);
-void gbp_devhelp_documentation_card_popup    (GbpDevhelpDocumentationCard *self);
-void gbp_devhelp_documentation_card_popdown  (GbpDevhelpDocumentationCard *self);
+gboolean gbp_devhelp_documentation_card_set_text (GbpDevhelpDocumentationCard *self,
+                                                  gchar                       *uri,
+                                                  const gchar                 *book_name);
+void gbp_devhelp_documentation_card_popup        (GbpDevhelpDocumentationCard *self);
+void gbp_devhelp_documentation_card_popdown      (GbpDevhelpDocumentationCard *self);
 G_END_DECLS
 
 #endif /* GBP_DEVHELP_DOCUMENTATION_CARD_H */
