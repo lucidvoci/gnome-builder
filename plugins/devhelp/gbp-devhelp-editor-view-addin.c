@@ -102,11 +102,11 @@ motion_notify_event_cb (gpointer data)
   gtk_text_view_get_iter_at_location (GTK_TEXT_VIEW (source_view), &end, x, y);
   gtk_text_view_get_iter_at_location (GTK_TEXT_VIEW (source_view), &begin, x, y);
 
-  while (g_unichar_isalpha(gtk_text_iter_get_char (&begin)) || g_unichar_isdigit(gtk_text_iter_get_char (&begin)) || gtk_text_iter_get_char (&begin) == '_')
+  while (g_unichar_islower (gtk_text_iter_get_char (&begin)) || g_unichar_isdigit(gtk_text_iter_get_char (&begin)) || gtk_text_iter_get_char (&begin) == '_')
     gtk_text_iter_backward_char (&begin);
   gtk_text_iter_forward_char (&begin);
 
-  while (g_unichar_isalpha(gtk_text_iter_get_char (&end)) || g_unichar_isdigit (gtk_text_iter_get_char (&end)) || gtk_text_iter_get_char (&end) == '_')
+  while (g_unichar_islower (gtk_text_iter_get_char (&end)) || g_unichar_isdigit (gtk_text_iter_get_char (&end)) || gtk_text_iter_get_char (&end) == '_')
     gtk_text_iter_forward_char (&end);
 
   selected_text = gtk_text_buffer_get_text (buffer, &begin, &end, FALSE);
@@ -151,7 +151,7 @@ gbp_devhelp_editor_view_addin_load (IdeEditorViewAddin *addin,
   self->keyword_model = dh_keyword_model_new ();
   self->popover = g_object_new (GBP_TYPE_DEVHELP_DOCUMENTATION_CARD,
                                 "relative-to", GTK_WIDGET (view),
-                                "position", GTK_POS_BOTTOM,
+                                "position", GTK_POS_TOP,
                                 "modal", FALSE,
                                 NULL);
 

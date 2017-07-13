@@ -25,6 +25,7 @@
 #include "gbp-devhelp-view.h"
 
 #define HOVER_TIMEOUT          1000
+#define CARD_WIDTH             80
 
 struct _GbpDevhelpDocumentationCard
 {
@@ -132,9 +133,6 @@ xml_parse (GbpDevhelpDocumentationCard *self,
           line = regex_replace_line (regexes[START_HEADER], line, "<tt>");
           line = regex_replace_line (regexes[NEW_LINE], line, "\n");
 
-          if (g_regex_match (regexes[REMOVE_MULTI_SPACES], line, 0, &match_info))
-            continue;
-
           if (g_regex_match (regexes[END_HEADER], line, 0, &match_info))
             {
               line = regex_replace_line (regexes[END_HEADER], line, "</tt>");
@@ -217,6 +215,8 @@ card_popdown (gpointer data)
   GbpDevhelpDocumentationCard *self = GBP_DEVHELP_DOCUMENTATION_CARD (data);
 
   gtk_popover_popdown (GTK_POPOVER (self));
+  gtk_popover_set_modal (GTK_POPOVER (self), FALSE);
+
   gtk_widget_set_visible (GTK_WIDGET (self->text), FALSE);
   gtk_widget_set_visible (GTK_WIDGET (self->goto_button), FALSE);
   gtk_widget_set_visible (GTK_WIDGET (self->button), TRUE);
@@ -253,10 +253,13 @@ gbp_devhelp_documentation_card__goto_button_clicked (GbpDevhelpDocumentationCard
 
 static void
 gbp_devhelp_documentation_card__button_clicked (GbpDevhelpDocumentationCard *self,
-                                                GtkButton        *button)
+                                                GtkButton                   *button)
 {
   g_assert (GBP_IS_DEVHELP_DOCUMENTATION_CARD (self));
   g_assert (GTK_IS_BUTTON (button));
+
+  gtk_popover_set_modal (GTK_POPOVER (self), TRUE);
+  gtk_label_set_width_chars (self->text, CARD_WIDTH);
 
   gtk_widget_set_visible (GTK_WIDGET (self->text), TRUE);
   gtk_widget_set_visible (GTK_WIDGET (self->goto_button), TRUE);
