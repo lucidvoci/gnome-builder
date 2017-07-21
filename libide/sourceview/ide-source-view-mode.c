@@ -20,6 +20,7 @@
 #define G_LOG_DOMAIN "ide-source-view-mode"
 
 #include <glib/gi18n.h>
+#include <string.h>
 
 #include "ide-debug.h"
 
@@ -146,9 +147,9 @@ ide_source_view_mode_get_keep_mark_on_char (IdeSourceViewMode *self)
 }
 
 static void
-ide_source_view_mode_finalize (GObject *object)
+ide_source_view_mode_destroy (GtkWidget *widget)
 {
-  IdeSourceViewMode *self = IDE_SOURCE_VIEW_MODE (object);
+  IdeSourceViewMode *self = IDE_SOURCE_VIEW_MODE (widget);
 
   g_clear_object (&self->view);
   g_clear_pointer (&self->name, g_free);
@@ -156,7 +157,7 @@ ide_source_view_mode_finalize (GObject *object)
   g_clear_pointer (&self->display_name, g_free);
   self->type = 0;
 
-  G_OBJECT_CLASS (ide_source_view_mode_parent_class)->finalize (object);
+  GTK_WIDGET_CLASS (ide_source_view_mode_parent_class)->destroy (widget);
 }
 
 static void
@@ -167,35 +168,75 @@ proxy_closure_marshal (GClosure     *closure,
                        gpointer      invocation_hint,
                        gpointer      marshal_data)
 {
+  g_autoptr(IdeSourceViewMode) self = NULL;
   GValue *param_copy;
-  IdeSourceViewMode *mode = IDE_SOURCE_VIEW_MODE (g_value_get_object (&param_values[0]));
 
-  param_copy = g_memdup (param_values, sizeof (GValue) * n_param_values);
+  g_assert (closure != NULL);
+  g_assert (param_values != NULL);
 
-  param_copy[0].data[0].v_pointer = mode->view;
-  g_signal_emitv (param_copy,
-                  GPOINTER_TO_INT (closure->data),
-                  0,
-                  return_value);
-  g_free (param_copy);
+  /*
+   * To be absolutely sure about reference counting with GValue and other
+   * ownership mishaps, this proxy makes a full copy of all parameters. It is
+   * certainly slower, but we are only activated from keybindings and the user
+   * can only type so fast...
+   */
+
+  self = g_value_dup_object (&param_values[0]);
+  g_assert (IDE_IS_SOURCE_VIEW_MODE (self));
+
+  if (self->view == NULL)
+    {
+      g_warning ("Cannot proxy signal after destroy has been called");
+      return;
+    }
+
+  /* Just spill to the stack, we only have a small number of params */
+  param_copy = g_alloca (sizeof (GValue) * n_param_values);
+  memset (param_copy, 0, sizeof (GValue) * n_param_values);
+
+  /* Swap the first object into the IdeSourceView */
+  g_value_init (&param_copy[0], G_OBJECT_TYPE (self->view));
+  g_value_set_object (&param_copy[0], self->view);
+
+  /* Copy the rest of the parameters across */
+  for (guint i = 1; i < n_param_values; i++)
+    {
+      g_value_init (&param_copy[i], G_VALUE_TYPE (&param_values[i]));
+      g_value_copy (&param_values[i], &param_copy[i]);
+    }
+
+  /* Emit the signal on the source view */
+  g_signal_emitv (param_copy, GPOINTER_TO_UINT (closure->data), 0, return_value);
+
+  /* Cleanup, dropping our references. */
+  for (guint i = 0; i < n_param_values; i++)
+    g_value_unset (&param_copy[i]);
 }
 
 static void
 proxy_all_action_signals (GType type)
 {
-  GClosure *proxy;
-  guint *signals;
-  guint n_signals, i;
+  g_autofree guint *signals = NULL;
   GSignalQuery query;
+  guint n_signals = 0;
+
+  g_assert (g_type_is_a (type, G_TYPE_OBJECT));
 
   signals = g_signal_list_ids (type, &n_signals);
 
-  for (i = 0; i < n_signals; i++)
+  for (guint i = 0; i < n_signals; i++)
     {
       g_signal_query (signals[i], &query);
 
+      /* We don't support detailed signals */
+      if (query.signal_flags & G_SIGNAL_DETAILED)
+        continue;
+
+      /* Only proxy keybinding action signals */
       if (query.signal_flags & G_SIGNAL_ACTION)
         {
+          GClosure *proxy;
+
           proxy = g_closure_new_simple (sizeof (GClosure), GINT_TO_POINTER (query.signal_id));
           g_closure_set_meta_marshal (proxy, NULL, proxy_closure_marshal);
           g_signal_newv (query.signal_name,
@@ -206,10 +247,9 @@ proxy_all_action_signals (GType type)
                          query.return_type,
                          query.n_params,
                          (GType *)query.param_types);
+          /* Proxy ownership is stolen when sinking the closure */
         }
     }
-
-  g_free (signals);
 }
 
 const gchar *
@@ -247,8 +287,9 @@ ide_source_view_mode_class_init (IdeSourceViewModeClass *klass)
   GtkBindingSet *binding_set, *parent_binding_set;
   GType type;
 
-  object_class->finalize = ide_source_view_mode_finalize;
   object_class->get_property = ide_source_view_mode_get_property;
+
+  widget_class->destroy = ide_source_view_mode_destroy;
 
   gtk_widget_class_set_css_name (widget_class, "idesourceviewmode");
 
@@ -401,6 +442,33 @@ toplevel_is_offscreen (GdkWindow *window)
   return FALSE;
 }
 
+static gboolean
+can_supress (const GdkEventKey *event)
+{
+  /*
+   * This is rather tricky because we don't know what can be activated
+   * in the bubble up phase of event delivery. Looking at ->string isn't
+   * very safe when input methods are in play. So we just hard code some
+   * things we know about common keybindings.
+   *
+   * If you are wondering why you're getting beeps in the editor while
+   * activating some keybinding you've added, you found the right spot!
+   */
+  if ((event->state & GDK_MODIFIER_MASK) != 0)
+    return FALSE;
+
+  switch (event->keyval)
+    {
+    case GDK_KEY_F1: case GDK_KEY_F2: case GDK_KEY_F3: case GDK_KEY_F4:
+    case GDK_KEY_F5: case GDK_KEY_F6: case GDK_KEY_F7: case GDK_KEY_F8:
+    case GDK_KEY_F9: case GDK_KEY_F10: case GDK_KEY_F11: case GDK_KEY_F12:
+      return FALSE;
+
+    default:
+      return TRUE;
+    }
+}
+
 gboolean
 _ide_source_view_mode_do_event (IdeSourceViewMode *mode,
                                 GdkEventKey       *event,
@@ -447,8 +515,8 @@ _ide_source_view_mode_do_event (IdeSourceViewMode *mode,
 
     case IDE_SOURCE_VIEW_MODE_TYPE_PERMANENT:
       {
-        /* don't block possible accelerators, but supress others */
-        if (!handled && suppress_unbound && ((event->state & GDK_MODIFIER_MASK) == 0))
+        /* Don't block possible accelerators, but supress others. */
+        if (!handled && suppress_unbound && can_supress (event))
           {
             if (!is_modifier_key (event) && !toplevel_is_offscreen (event->window))
               gdk_window_beep (event->window);

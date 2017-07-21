@@ -1,6 +1,6 @@
 /* ide-editor-layout-stack-addin.h
  *
- * Copyright (C) 2016 Christian Hergert <chergert@redhat.com>
+ * Copyright (C) 2017 Christian Hergert <chergert@redhat.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,12 +16,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef IDE_EDITOR_LAYOUT_STACK_ADDIN_H
-#define IDE_EDITOR_LAYOUT_STACK_ADDIN_H
+#pragma once
 
-#include <gtk/gtk.h>
-
-#include "workbench/ide-layout-stack-addin.h"
+#include "layout/ide-layout-stack-addin.h"
 
 G_BEGIN_DECLS
 
@@ -30,5 +27,3 @@ G_BEGIN_DECLS
 G_DECLARE_FINAL_TYPE (IdeEditorLayoutStackAddin, ide_editor_layout_stack_addin, IDE, EDITOR_LAYOUT_STACK_ADDIN, GObject)
 
 G_END_DECLS
-
-#endif /* IDE_EDITOR_LAYOUT_STACK_ADDIN_H */

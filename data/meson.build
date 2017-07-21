@@ -1,27 +1,37 @@
-msgfmt = find_program('msgfmt')
-podir = join_paths(meson.source_root(), 'po')
 
 # Desktop launcher and description file.
-custom_target(
-  'desktop-file',
+desktop_file = i18n.merge_file(
   input: 'org.gnome.Builder.desktop.in.in',
   output: 'org.gnome.Builder.desktop',
+  type: 'desktop',
+  po_dir: '../po',
   install: true,
   install_dir: join_paths(get_option('datadir'), 'applications'),
-  command: [msgfmt, '--desktop', '--template', '@INPUT@',
-    '-d', podir, '-o', '@OUTPUT@'],
 )
 
+desktop_utils = find_program('desktop-file-validate', required: false)
+if desktop_utils.found()
+  test('Validate desktop file', desktop_utils,
+    args: [desktop_file]
+  )
+endif
+
 # Appdata file.
-custom_target(
-  'appdata-file',
+appdata_file = i18n.merge_file(
   input: 'org.gnome.Builder.appdata.xml.in',
   output: 'org.gnome.Builder.appdata.xml',
+  po_dir: '../po',
   install: true,
   install_dir: join_paths(get_option('datadir'), 'appdata'),
-  command: [msgfmt, '--xml', '--template', '@INPUT@',
-    '-d', podir, '-o', '@OUTPUT@'],
 )
+
+appstream_util = find_program('appstream-util', required: false)
+if appstream_util.found()
+  test('Validate appstream file', appstream_util,
+    # FIXME: Screenshots are wrong size for 'validate'
+    args: ['validate-relax', appdata_file]
+  )
+endif
 
 # D-Bus service file.
 dbusconf = configuration_data()

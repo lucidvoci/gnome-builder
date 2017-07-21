@@ -20,33 +20,12 @@
 
 #include <glib/gi18n.h>
 
-#include "editor/ide-editor-frame-private.h"
+#include "ide-internal.h"
+
 #include "editor/ide-editor-layout-stack-controls.h"
-#include "editor/ide-editor-view-private.h"
+#include "editor/ide-editor-private.h"
 
 G_DEFINE_TYPE (IdeEditorLayoutStackControls, ide_editor_layout_stack_controls, GTK_TYPE_BOX)
-
-static gboolean
-language_to_string (GBinding     *binding,
-                    const GValue *from_value,
-                    GValue       *to_value,
-                    gpointer      user_data)
-{
-  GtkSourceLanguage *language;
-
-  g_assert (G_VALUE_HOLDS (from_value, GTK_SOURCE_TYPE_LANGUAGE));
-  g_assert (G_VALUE_HOLDS_STRING (to_value));
-  g_assert (user_data == NULL);
-
-  language = g_value_get_object (from_value);
-
-  if (language != NULL)
-    g_value_set_string (to_value, gtk_source_language_get_name (language));
-  else
-    g_value_set_string (to_value, _("Plain Text"));
-
-  return TRUE;
-}
 
 static void
 document_cursor_moved (IdeEditorLayoutStackControls *self,
@@ -68,7 +47,10 @@ document_cursor_moved (IdeEditorLayoutStackControls *self,
   if (self->view == NULL)
     return;
 
-  source_view = ide_editor_view_get_active_source_view (self->view);
+  if (_ide_buffer_get_loading (IDE_BUFFER (buffer)))
+    return;
+
+  source_view = ide_editor_view_get_view (self->view);
 
   ide_source_view_get_visual_position (source_view, &line, (guint *)&column);
 
@@ -119,14 +101,16 @@ goto_line_activate (IdeEditorLayoutStackControls *self,
 
       if ((value > 0) && (value < G_MAXINT))
         {
+          IdeSourceView *source_view;
+          GtkTextBuffer *buffer = GTK_TEXT_BUFFER (self->view->buffer);
           GtkTextIter iter;
-          GtkTextBuffer *buffer = GTK_TEXT_BUFFER (self->view->document);
 
-          gtk_widget_grab_focus (GTK_WIDGET (self->view->frame1->source_view));
+          source_view = ide_editor_view_get_view (self->view);
+
+          gtk_widget_grab_focus (GTK_WIDGET (self->view));
           gtk_text_buffer_get_iter_at_line (buffer, &iter, value - 1);
           gtk_text_buffer_select_range (buffer, &iter, &iter);
-          ide_source_view_scroll_to_iter (self->view->frame1->source_view,
-                                          &iter, 0.25, TRUE, 1.0, 0.5, TRUE);
+          ide_source_view_scroll_to_iter (source_view, &iter, 0.25, TRUE, 1.0, 0.5, TRUE);
         }
     }
 }
@@ -168,7 +152,7 @@ goto_line_changed (IdeEditorLayoutStackControls *self,
 
   text = dzl_simple_popover_get_text (popover);
 
-  gtk_text_buffer_get_bounds (GTK_TEXT_BUFFER (self->view->document), &begin, &end);
+  gtk_text_buffer_get_bounds (GTK_TEXT_BUFFER (self->view->buffer), &begin, &end);
 
   if (!ide_str_empty0 (text))
     {
@@ -208,9 +192,24 @@ warning_button_clicked (IdeEditorLayoutStackControls *self,
   if (self->view == NULL)
     return;
 
-  source_view = ide_editor_view_get_active_source_view (self->view);
+  source_view = ide_editor_view_get_view (self->view);
   gtk_widget_grab_focus (GTK_WIDGET (source_view));
   g_signal_emit_by_name (source_view, "move-error", GTK_DIR_DOWN);
+}
+
+static void
+ide_editor_layout_stack_controls_bind (IdeEditorLayoutStackControls *self,
+                                       GtkTextBuffer                *buffer,
+                                       DzlSignalGroup               *buffer_signals)
+{
+  GtkTextIter iter;
+
+  g_assert (IDE_IS_EDITOR_LAYOUT_STACK_CONTROLS (self));
+  g_assert (IDE_IS_BUFFER (buffer));
+  g_assert (DZL_IS_SIGNAL_GROUP (buffer_signals));
+
+  gtk_text_buffer_get_iter_at_mark (buffer, &iter, gtk_text_buffer_get_insert (buffer));
+  document_cursor_moved (self, &iter, buffer);
 }
 
 static void
@@ -218,8 +217,8 @@ ide_editor_layout_stack_controls_finalize (GObject *object)
 {
   IdeEditorLayoutStackControls *self = (IdeEditorLayoutStackControls *)object;
 
-  g_clear_object (&self->document_bindings);
-  g_clear_object (&self->document_signals);
+  g_clear_object (&self->buffer_bindings);
+  g_clear_object (&self->buffer_signals);
 
   self->view = NULL;
 
@@ -241,8 +240,6 @@ ide_editor_layout_stack_controls_class_init (IdeEditorLayoutStackControlsClass *
   gtk_widget_class_bind_template_child (widget_class, IdeEditorLayoutStackControls, line_label);
   gtk_widget_class_bind_template_child (widget_class, IdeEditorLayoutStackControls, range_label);
   gtk_widget_class_bind_template_child (widget_class, IdeEditorLayoutStackControls, warning_button);
-  gtk_widget_class_bind_template_child (widget_class, IdeEditorLayoutStackControls, tweak_button);
-  gtk_widget_class_bind_template_child (widget_class, IdeEditorLayoutStackControls, tweak_widget);
 }
 
 static void
@@ -274,20 +271,20 @@ ide_editor_layout_stack_controls_init (IdeEditorLayoutStackControls *self)
                            self,
                            G_CONNECT_SWAPPED);
 
-  self->document_bindings = dzl_binding_group_new ();
+  self->buffer_bindings = dzl_binding_group_new ();
 
-  dzl_binding_group_bind (self->document_bindings, "has-diagnostics",
+  dzl_binding_group_bind (self->buffer_bindings, "has-diagnostics",
                           self->warning_button, "visible",
                           G_BINDING_SYNC_CREATE);
 
-  dzl_binding_group_bind_full (self->document_bindings, "language",
-                               self->tweak_button, "label",
-                               G_BINDING_SYNC_CREATE,
-                               language_to_string, NULL, NULL, NULL);
+  self->buffer_signals = dzl_signal_group_new (IDE_TYPE_BUFFER);
 
-  self->document_signals = dzl_signal_group_new (IDE_TYPE_BUFFER);
+  g_signal_connect_swapped (self->buffer_signals,
+                            "bind",
+                            G_CALLBACK (ide_editor_layout_stack_controls_bind),
+                            self);
 
-  dzl_signal_group_connect_object (self->document_signals,
+  dzl_signal_group_connect_object (self->buffer_signals,
                                    "cursor-moved",
                                    G_CALLBACK (document_cursor_moved),
                                    self,
@@ -304,8 +301,8 @@ ide_editor_layout_stack_controls_set_view (IdeEditorLayoutStackControls *self,
   if (self->view == view)
     return;
 
-  dzl_binding_group_set_source (self->document_bindings, NULL);
-  dzl_signal_group_set_target (self->document_signals, NULL);
+  dzl_binding_group_set_source (self->buffer_bindings, NULL);
+  dzl_signal_group_set_target (self->buffer_signals, NULL);
 
   if (self->view != NULL)
     {
@@ -322,7 +319,7 @@ ide_editor_layout_stack_controls_set_view (IdeEditorLayoutStackControls *self,
                         "destroy",
                         G_CALLBACK (gtk_widget_destroyed),
                         &self->view);
-      dzl_binding_group_set_source (self->document_bindings, view->document);
-      dzl_signal_group_set_target (self->document_signals, view->document);
+      dzl_binding_group_set_source (self->buffer_bindings, view->buffer);
+      dzl_signal_group_set_target (self->buffer_signals, view->buffer);
     }
 }

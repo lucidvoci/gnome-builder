@@ -40,52 +40,44 @@
       </item>
     </section>
   </menu>
+  <menu id="perspectives-menu">
+    <section id="perspectives-menu-section">
+      <item>
+        <attribute name="accel">&lt;alt&gt;1</attribute>
+        <attribute name="action">win.perspective</attribute>
+        <attribute name="id">perspective-menu-editor</attribute>
+        <attribute name="label" translatable="yes">Editor</attribute>
+        <attribute name="role">normal</attribute>
+        <attribute name="target">editor</attribute>
+        <attribute name="verb-icon-name">builder-editor-symbolic</attribute>
+      </item>
+    </section>
+    <section id="perspectives-menu-prefs-section">
+      <item>
+        <attribute name="accel">&lt;alt&gt;comma</attribute>
+        <attribute name="action">win.perspective</attribute>
+        <attribute name="id">perspective-menu-build-prefs</attribute>
+        <attribute name="label" translatable="yes">Build Preferences</attribute>
+        <attribute name="role">normal</attribute>
+        <attribute name="target">buildperspective</attribute>
+        <attribute name="verb-icon-name">builder-build-configure-symbolic</attribute>
+      </item>
+      <item>
+        <attribute name="accel">&lt;primary&gt;comma</attribute>
+        <attribute name="action">win.perspective</attribute>
+        <attribute name="id">perspective-menu-prefs</attribute>
+        <attribute name="label" translatable="yes">Preferences</attribute>
+        <attribute name="role">normal</attribute>
+        <attribute name="target">preferences</attribute>
+        <attribute name="verb-icon-name">preferences-system-symbolic</attribute>
+      </item>
+    </section>
+  </menu>
   <menu id="gear-menu">
-    <section id="gear-menu-layout-section">
-      <attribute name="id">panel-section</attribute>
-      <attribute name="display-hint">horizontal-buttons</attribute>
-      <attribute name="text-direction">ltr</attribute>
-      <item>
-        <attribute name="label" translatable="yes">Show left panel</attribute>
-        <attribute name="action">perspective.left-visible</attribute>
-        <attribute name="verb-icon">builder-view-left-pane-symbolic</attribute>
-      </item>
-      <item>
-        <attribute name="label" translatable="yes">Show bottom panel</attribute>
-        <attribute name="action">perspective.bottom-visible</attribute>
-        <attribute name="verb-icon">builder-view-bottom-pane-symbolic</attribute>
-      </item>
-      <item>
-        <attribute name="label" translatable="yes">Show right panel</attribute>
-        <attribute name="action">perspective.right-visible</attribute>
-        <attribute name="verb-icon">builder-view-right-pane-symbolic</attribute>
-      </item>
-    </section>
-<!--
-    <section>
-      <attribute name="id">juntion-section</attribute>
-      <attribute name="display-hint">horizontal-buttons</attribute>
-      <item>
-        <attribute name="label" translatable="yes">_Reload</attribute>
-        <attribute name="action">win.revert</attribute>
-        <attribute name="verb-icon">view-refresh-symbolic</attribute>
-      </item>
-      <item>
-        <attribute name="label" translatable="yes">_Print…</attribute>
-        <attribute name="action">win.print</attribute>
-        <attribute name="verb-icon">printer-symbolic</attribute>
-      </item>
-      <item>
-        <attribute name="label" translatable="yes">_Fullscreen</attribute>
-        <attribute name="action">win.fullscreen</attribute>
-        <attribute name="verb-icon">view-fullscreen-symbolic</attribute>
-      </item>
-    </section>
--->
     <section id="gear-menu-new-section">
       <item>
         <attribute name="label" translatable="yes">_New File</attribute>
-        <attribute name="action">perspective.new-file</attribute>
+        <attribute name="action">editor.new-file</attribute>
       </item>
     </section>
     <section id="gear-menu-open-section">
@@ -100,15 +92,12 @@
         <attribute name="action">win.save-all</attribute>
       </item>
     </section>
-<!--
-    <section>
-      <attribute name="id">close-section</attribute>
+    <section id="gear-menu-fullscreen-section">
       <item>
-        <attribute name="label" translatable="yes">_Close All</attribute>
-        <attribute name="action">workbench.close-all</attribute>
+        <attribute name="label" translatable="yes">_Fullscreen</attribute>
+        <attribute name="action">win.fullscreen</attribute>
       </item>
     </section>
--->
   </menu>
   <menu id="ide-source-view-popup-menu">
     <section id="ide-source-view-popup-menu-jump-section">
@@ -146,13 +135,11 @@
         <attribute name="action">sourceview.delete-selection</attribute>
       </item>
     </section>
+    <section id="ide-source-view-popup-menu-spellcheck-section">
+    </section>
     <section id="ide-source-view-popup-menu-highlighting-section">
       <submenu id="ide-source-view-popup-menu-highlighting-submenu">
         <attribute name="label" translatable="yes">Highlighting</attribute>
-        <item>
-          <attribute name="label" translatable="yes">Spellchecking</attribute>
-          <attribute name="action">view.spellchecking</attribute>
-        </item>
       </submenu>
     </section>
     <section id="ide-source-view-popup-menu-selection-section">
@@ -233,93 +220,136 @@
       </submenu>
     </section>
   </menu>
-  <menu id="ide-editor-frame-search-menu">
-    <section id="ide-editor-frame-search-menu-settings-section">
+  <menu id="ide-editor-search-bar-entry-menu">
+    <section id="ide-editor-search-bar-entry-menu-settings-section">
+      <item>
+        <attribute name="label" translatable="yes">Regular expressions</attribute>
+        <attribute name="action">search-settings.regex-enabled</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">Case sensitive</attribute>
+        <attribute name="action">search-settings.case-sensitive</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">Match whole word only</attribute>
+        <attribute name="action">search-settings.at-word-boundaries</attribute>
+      </item>
       <item>
         <attribute name="label" translatable="yes">_Wrap Around</attribute>
-        <attribute name="action">search-entry.change-wrap-around</attribute>
+        <attribute name="action">search-settings.wrap-around</attribute>
       </item>
     </section>
-    <section id="ide-editor-frame-search-menu-clipboard-section">
+    <section id="ide-editor-search-bar-entry-menu-clipboard-section">
       <item>
         <attribute name="label" translatable="yes">Cu_t</attribute>
-        <attribute name="action">search-entry.cut-clipboard</attribute>
+        <attribute name="action">entry.cut-clipboard</attribute>
       </item>
       <item>
         <attribute name="label" translatable="yes">_Copy</attribute>
-        <attribute name="action">search-entry.copy-clipboard</attribute>
+        <attribute name="action">entry.copy-clipboard</attribute>
       </item>
       <item>
         <attribute name="label" translatable="yes">_Paste</attribute>
-        <attribute name="action">search-entry.paste-clipboard</attribute>
+        <attribute name="action">entry.paste-clipboard</attribute>
       </item>
       <item>
         <attribute name="label" translatable="yes">_Delete</attribute>
-        <attribute name="action">search-entry.delete-selection</attribute>
+        <attribute name="action">entry.delete-selection</attribute>
       </item>
     </section>
-    <section id="ide-editor-frame-search-menu-selection-section">
+    <section id="ide-editor-search-bar-entry-menu-selection-section">
       <item>
         <attribute name="label" translatable="yes">Select _All</attribute>
-        <attribute name="action">search-entry.select-all</attribute>
+        <attribute name="action">entry.select-all</attribute>
       </item>
     </section>
   </menu>
-  <menu id="ide-layout-stack-menu">
-    <section id="ide-layout-stack-menu-splits-section">
-      <attribute name="display-hint">horizontal-buttons</attribute>
-      <attribute name="label" translatable="yes">Split</attribute>
-      <item>
-        <attribute name="label" translatable="yes">Split Left</attribute>
-        <attribute name="action">view-stack.split-left</attribute>
-        <attribute name="verb-icon">builder-split-tab-left-symbolic</attribute>
-      </item>
-      <item>
-        <attribute name="label" translatable="yes">Split Right</attribute>
-        <attribute name="action">view-stack.split-right</attribute>
-        <attribute name="verb-icon">builder-split-tab-right-symbolic</attribute>
-      </item>
-      <item>
-        <attribute name="label" translatable="yes">Split Down</attribute>
-        <attribute name="action">view-stack.split-down</attribute>
-        <attribute name="verb-icon">builder-split-tab-symbolic</attribute>
-      </item>
-    </section>
-    <section id="ide-layout-stack-menu-move-section">
-      <attribute name="display-hint">horizontal-buttons</attribute>
-      <attribute name="label" translatable="yes">Move</attribute>
+  <menu id="ide-layout-stack-frame-menu">
+    <section id="ide-layout-stack-frame-section">
+      <attribute name="label" translatable="yes">Frame</attribute>
       <item>
         <attribute name="label" translatable="yes">Move Left</attribute>
-        <attribute name="action">view-stack.move-left</attribute>
-        <attribute name="verb-icon">builder-move-left-symbolic</attribute>
+        <attribute name="action">layoutstack.move-left</attribute>
       </item>
       <item>
         <attribute name="label" translatable="yes">Move Right</attribute>
-        <attribute name="action">view-stack.move-right</attribute>
-        <attribute name="verb-icon">builder-move-right-symbolic</attribute>
+        <attribute name="action">layoutstack.move-right</attribute>
+      </item>
+      <item>
+        <attribute name="action">layoutgrid.close-stack</attribute>
+        <attribute name="label" translatable="yes">Close</attribute>
       </item>
     </section>
-    <section id="ide-layout-stack-menu-preview-section"/>
-    <section id="ide-layout-stack-menu-save-section">
+  </menu>
+  <menu id="new-document-menu">
+    <section id="new-document-section">
       <item>
+        <attribute name="id">new-file</attribute>
+        <attribute name="label" translatable="yes">New File</attribute>
+        <attribute name="action">editor.new-file</attribute>
+      </item>
+    </section>
+    <section id="open-document-section">
+      <item>
+        <attribute name="id">open-file</attribute>
+        <attribute name="label" translatable="yes">Open File…</attribute>
+        <attribute name="action">win.open-with-dialog</attribute>
+      </item>
+    </section>
+  </menu>
+  <menu id="ide-editor-view-document-menu">
+    <section id="editor-document-section">
+      <attribute name="label" translatable="yes">Document</attribute>
+      <item>
+        <attribute name="id">editor-document-open-in-new-frame</attribute>
+        <attribute name="label" translatable="yes">Open in New Frame</attribute>
+        <attribute name="action">layoutstack.open-in-new-frame</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">Split</attribute>
+        <attribute name="action">layoutstack.split-view</attribute>
+        <attribute name="verb-icon-name">builder-split-tab-symbolic</attribute>
+      </item>
+      <item>
+        <attribute name="label" translatable="yes">Print…</attribute>
+        <attribute name="action">editor-view.print</attribute>
+      </item>
+    </section>
+    <section id="editor-document-preferences-section">
+      <attribute name="after">editor-document-section</attribute>
+      <item>
+        <attribute name="label" translatable="yes">Document Preferences</attribute>
+        <attribute name="action">editor-view.properties</attribute>
+      </item>
+    </section>
+    <section id="editor-document-save-section">
+      <attribute name="after">editor-document-preferences-section</attribute>
+      <item>
+        <attribute name="action">editor-view.save</attribute>
         <attribute name="label" translatable="yes">_Save</attribute>
-        <attribute name="action">view.save</attribute>
       </item>
       <item>
-        <attribute name="label" translatable="yes">_Save As</attribute>
-        <attribute name="action">view.save-as</attribute>
-      </item>
-    </section>
-    <section id="ide-layout-stack-menu-print-section">
-      <item>
-        <attribute name="label" translatable="yes">_Print</attribute>
-        <attribute name="action">view.print</attribute>
+        <attribute name="action">editor-view.save-as</attribute>
+        <attribute name="label" translatable="yes">Save _As</attribute>
       </item>
     </section>
-    <section id="ide-layout-stack-menu-close-section">
+    <section id="editor-document-close-section">
+      <attribute name="after">editor-document-save-section</attribute>
       <item>
-        <attribute name="label" translatable="yes">_Close</attribute>
-        <attribute name="action">view-stack.close</attribute>
+        <attribute name="action">layoutstack.close-view</attribute>
+        <attribute name="label" translatable="yes">Close</attribute>
+      </item>
+    </section>
+  </menu>
+  <menu id="run-menu">
+    <section id="run-menu-section">
+      <item>
+        <attribute name="id">default-run-handler</attribute>
+        <attribute name="action">run-manager.run-with-handler</attribute>
+        <attribute name="target">run</attribute>
+        <attribute name="label" translatable="yes">Run</attribute>
+        <attribute name="verb-icon-name">media-playback-start-symbolic</attribute>
+        <attribute name="accel">&lt;Control&gt;F5</attribute>
       </item>
     </section>
   </menu>

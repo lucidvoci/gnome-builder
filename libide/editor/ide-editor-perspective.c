@@ -1,6 +1,6 @@
 /* ide-editor-perspective.c
  *
- * Copyright (C) 2015 Christian Hergert <chergert@redhat.com>
+ * Copyright (C) 2017 Christian Hergert <chergert@redhat.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,39 +18,21 @@
 
 #define G_LOG_DOMAIN "ide-editor-perspective"
 
-#include <dazzle.h>
 #include <glib/gi18n.h>
 
-#include "ide-context.h"
-#include "ide-debug.h"
-
-#include "buffers/ide-buffer-manager.h"
 #include "buffers/ide-buffer.h"
+#include "buffers/ide-buffer-manager.h"
+#include "diagnostics/ide-source-location.h"
+#include "editor/ide-editor-addin.h"
 #include "editor/ide-editor-perspective.h"
-#include "editor/ide-editor-spell-widget.h"
+#include "editor/ide-editor-private.h"
+#include "editor/ide-editor-properties.h"
+#include "editor/ide-editor-sidebar.h"
 #include "editor/ide-editor-view.h"
-#include "util/ide-gtk.h"
-#include "workbench/ide-layout-grid.h"
-#include "workbench/ide-layout-pane.h"
+#include "layout/ide-layout-transient-sidebar.h"
+#include "workbench/ide-perspective.h"
 #include "workbench/ide-workbench.h"
-#include "workbench/ide-workbench-header-bar.h"
-
-#define OVERLAY_REVEAL_DURATION 300
-
-struct _IdeEditorPerspective
-{
-  DzlDockOverlay         parent_instance;
-
-  GtkWidget             *active_view;
-  IdeLayout             *layout;
-  IdeLayoutGrid         *grid;
-  GSimpleActionGroup    *actions;
-
-  DzlSignalGroup        *buffer_manager_signals;
-
-  gint                   right_pane_position;
-  guint                  spellchecker_opened : 1;
-};
+#include "util/ide-gtk.h"
 
 typedef struct
 {
@@ -58,278 +40,136 @@ typedef struct
   IdeSourceLocation    *location;
 } FocusLocation;
 
-static void ide_perspective_iface_init                 (IdePerspectiveInterface *iface);
-static void ide_editor_perspective_add                 (GtkContainer            *container,
-                                                        GtkWidget               *widget);
+static void perspective_iface_init                     (IdePerspectiveInterface *iface);
 static void ide_editor_perspective_focus_location_full (IdeEditorPerspective    *self,
                                                         IdeSourceLocation       *location,
                                                         gboolean                 open_if_not_found);
 
-G_DEFINE_TYPE_EXTENDED (IdeEditorPerspective, ide_editor_perspective, DZL_TYPE_DOCK_OVERLAY, 0,
-                        G_IMPLEMENT_INTERFACE (IDE_TYPE_PERSPECTIVE, ide_perspective_iface_init))
-
-enum {
-  PROP_0,
-  PROP_ACTIVE_VIEW,
-  LAST_PROP
-};
-
-static GParamSpec *properties [LAST_PROP];
-
-enum {
-  VIEW_ADDED,
-  VIEW_REMOVED,
-  LAST_SIGNAL
-};
-
-static guint signals [LAST_SIGNAL];
+G_DEFINE_TYPE_WITH_CODE (IdeEditorPerspective, ide_editor_perspective, IDE_TYPE_LAYOUT,
+                         G_IMPLEMENT_INTERFACE (IDE_TYPE_PERSPECTIVE, perspective_iface_init))
 
 static void
-ide_editor_perspective_restore_panel_state (IdeEditorPerspective *self)
-{
-  g_autoptr(GSettings) settings = NULL;
-  GtkWidget *pane;
-  gboolean reveal;
-  guint position;
-
-  g_assert (IDE_IS_EDITOR_PERSPECTIVE (self));
-
-  settings = g_settings_new ("org.gnome.builder.workbench");
-
-  pane = dzl_dock_bin_get_left_edge (DZL_DOCK_BIN (self->layout));
-  reveal = g_settings_get_boolean (settings, "left-visible");
-  position = g_settings_get_int (settings, "left-position");
-  dzl_dock_revealer_set_reveal_child (DZL_DOCK_REVEALER (pane), reveal);
-  dzl_dock_revealer_set_position (DZL_DOCK_REVEALER (pane), position);
-
-  pane = dzl_dock_bin_get_right_edge (DZL_DOCK_BIN (self->layout));
-  reveal = g_settings_get_boolean (settings, "right-visible");
-  position = g_settings_get_int (settings, "right-position");
-  dzl_dock_revealer_set_reveal_child (DZL_DOCK_REVEALER (pane), reveal);
-  dzl_dock_revealer_set_position (DZL_DOCK_REVEALER (pane), position);
-
-  pane = dzl_dock_bin_get_bottom_edge (DZL_DOCK_BIN (self->layout));
-  reveal = g_settings_get_boolean (settings, "bottom-visible");
-  position = g_settings_get_int (settings, "bottom-position");
-  dzl_dock_revealer_set_reveal_child (DZL_DOCK_REVEALER (pane), reveal);
-  dzl_dock_revealer_set_position (DZL_DOCK_REVEALER (pane), position);
-}
-
-static void
-ide_editor_perspective_save_panel_state (IdeEditorPerspective *self)
-{
-  g_autoptr(GSettings) settings = NULL;
-  GtkWidget *pane;
-  gboolean reveal;
-  guint position;
-
-  g_assert (IDE_IS_EDITOR_PERSPECTIVE (self));
-
-  settings = g_settings_new ("org.gnome.builder.workbench");
-
-  pane = dzl_dock_bin_get_left_edge (DZL_DOCK_BIN (self->layout));
-  position = dzl_dock_revealer_get_position (DZL_DOCK_REVEALER (pane));
-  reveal = dzl_dock_revealer_get_reveal_child (DZL_DOCK_REVEALER (pane));
-  g_settings_set_boolean (settings, "left-visible", reveal);
-  g_settings_set_int (settings, "left-position", position);
-
-  pane = dzl_dock_bin_get_right_edge (DZL_DOCK_BIN (self->layout));
-  position = dzl_dock_revealer_get_position (DZL_DOCK_REVEALER (pane));
-  reveal = dzl_dock_revealer_get_reveal_child (DZL_DOCK_REVEALER (pane));
-  g_settings_set_boolean (settings, "right-visible", reveal);
-  g_settings_set_int (settings, "right-position", position);
-
-  pane = dzl_dock_bin_get_bottom_edge (DZL_DOCK_BIN (self->layout));
-  position = dzl_dock_revealer_get_position (DZL_DOCK_REVEALER (pane));
-  reveal = dzl_dock_revealer_get_reveal_child (DZL_DOCK_REVEALER (pane));
-  g_settings_set_boolean (settings, "bottom-visible", reveal);
-  g_settings_set_int (settings, "bottom-position", position);
-}
-
-static void
-ide_editor_perspective_context_set (GtkWidget  *widget,
-                                    IdeContext *context)
-{
-  IdeEditorPerspective *self = (IdeEditorPerspective *)widget;
-  IdeBufferManager *buffer_manager = NULL;
-
-  g_assert (IDE_IS_EDITOR_PERSPECTIVE (self));
-  g_assert (!context || IDE_IS_CONTEXT (context));
-
-  if (context != NULL)
-    buffer_manager = ide_context_get_buffer_manager (context);
-
-  dzl_signal_group_set_target (self->buffer_manager_signals, buffer_manager);
-}
-
-static void
-ide_editor_perspective_load_buffer (IdeEditorPerspective *self,
-                                    IdeBuffer            *buffer,
-                                    gboolean              create_new_view,
-                                    IdeBufferManager     *buffer_manager)
-{
-  IdeEditorView *view;
-  GtkWidget *stack;
-  IdeWorkbench *workbench;
-
-  g_assert (IDE_IS_EDITOR_PERSPECTIVE (self));
-  g_assert (IDE_IS_BUFFER (buffer));
-  g_assert (IDE_IS_BUFFER_MANAGER (buffer_manager));
-
-  /*
-   * We only want to create a new view when the buffer is originally
-   * created, not when it's reloaded.
-   */
-  if (!create_new_view)
-    {
-      ide_buffer_manager_set_focus_buffer (buffer_manager, buffer);
-      return;
-    }
-
-  IDE_TRACE_MSG ("Loading %s", ide_buffer_get_title (buffer));
-
-  view = g_object_new (IDE_TYPE_EDITOR_VIEW,
-                       "document", buffer,
-                       "visible", TRUE,
-                       NULL);
-
-  stack = ide_layout_grid_get_last_focus (self->grid);
-
-  ide_editor_perspective_add (GTK_CONTAINER (self), GTK_WIDGET (view));
-
-  workbench = ide_widget_get_workbench (GTK_WIDGET (stack));
-  ide_workbench_focus (workbench, GTK_WIDGET (view));
-}
-
-static void
-ide_editor_perspective_locate_buffer (GtkWidget *view,
-                                      gpointer   user_data)
-{
-  IdeBuffer **buffer = user_data;
-
-  g_assert (IDE_IS_LAYOUT_VIEW (view));
-  g_assert (buffer != NULL);
-  g_assert (!*buffer || IDE_IS_BUFFER (*buffer));
-
-  if (!*buffer)
-    return;
-
-  if (IDE_IS_EDITOR_VIEW (view))
-    {
-      if (*buffer == ide_editor_view_get_document (IDE_EDITOR_VIEW (view)))
-        {
-          GtkWidget *stack;
-
-          stack = gtk_widget_get_ancestor (view, IDE_TYPE_LAYOUT_STACK);
-
-          if (stack != NULL)
-            {
-              IdeWorkbench *workbench;
-
-              ide_layout_stack_set_active_view (IDE_LAYOUT_STACK (stack), view);
-              *buffer = NULL;
-
-              workbench = ide_widget_get_workbench (GTK_WIDGET (stack));
-              ide_workbench_focus (workbench, GTK_WIDGET (view));
-            }
-        }
-    }
-}
-
-void
-ide_editor_perspective_focus_buffer_in_current_stack (IdeEditorPerspective *self,
-                                                      IdeBuffer            *buffer)
-{
-  GtkWidget *focus_stack;
-
-  g_assert (IDE_IS_EDITOR_PERSPECTIVE (self));
-  g_assert (IDE_IS_BUFFER (buffer));
-
-  focus_stack = ide_layout_grid_get_last_focus (self->grid);
-  g_assert (!focus_stack || IDE_IS_LAYOUT_STACK (focus_stack));
-
-  if (focus_stack != NULL)
-    {
-      IdeBuffer *search_buffer = buffer;
-      GtkWidget *view;
-
-      ide_layout_stack_foreach_view (IDE_LAYOUT_STACK (focus_stack),
-                                     ide_editor_perspective_locate_buffer,
-                                     &search_buffer);
-
-      if (search_buffer != NULL)
-        {
-          view = g_object_new (IDE_TYPE_EDITOR_VIEW,
-                               "document", buffer,
-                               "visible", TRUE,
-                               NULL);
-          ide_editor_perspective_add (GTK_CONTAINER (self), view);
-        }
-    }
-}
-
-static void
-ide_editor_perspective_notify_focus_buffer (IdeEditorPerspective *self,
-                                            GParamSpec           *pspec,
-                                            IdeBufferManager     *buffer_manager)
-{
-  IdeBuffer *buffer;
-
-  g_assert (IDE_IS_EDITOR_PERSPECTIVE (self));
-  g_assert (IDE_IS_BUFFER_MANAGER (buffer_manager));
-
-  buffer = ide_buffer_manager_get_focus_buffer (buffer_manager);
-  if (buffer == NULL)
-    return;
-
-  ide_layout_grid_foreach_view (self->grid,
-                                ide_editor_perspective_locate_buffer,
-                                &buffer);
-}
-
-static void
-new_file_activate (GSimpleAction *action,
-                   GVariant      *param,
-                   gpointer       user_data)
+ide_editor_perspective_addin_added (PeasExtensionSet *set,
+                                    PeasPluginInfo   *plugin_info,
+                                    PeasExtension    *exten,
+                                    gpointer          user_data)
 {
   IdeEditorPerspective *self = user_data;
-  IdeWorkbench *workbench;
-  IdeContext *context;
-  IdeBufferManager *bufmgr;
-  IdeBuffer *buffer;
+  IdeEditorAddin *addin = (IdeEditorAddin *)exten;
+  IdeLayoutView *view;
 
   g_assert (IDE_IS_EDITOR_PERSPECTIVE (self));
+  g_assert (IDE_IS_EDITOR_ADDIN (addin));
+  g_assert (PEAS_IS_EXTENSION_SET (set));
+  g_assert (plugin_info != NULL);
 
-  workbench = ide_widget_get_workbench (GTK_WIDGET (self));
-  context = ide_workbench_get_context (workbench);
-  bufmgr = ide_context_get_buffer_manager (context);
-  buffer = ide_buffer_manager_create_temporary_buffer (bufmgr);
+  ide_editor_addin_load (addin, self);
 
-  g_clear_object (&buffer);
+  view = ide_layout_grid_get_current_view (self->grid);
+  if (view != NULL)
+    ide_editor_addin_view_set (addin, view);
 }
 
 static void
-ide_editor_perspective_finalize (GObject *object)
+ide_editor_perspective_addin_removed (PeasExtensionSet *set,
+                                      PeasPluginInfo   *plugin_info,
+                                      PeasExtension    *exten,
+                                      gpointer          user_data)
 {
-  IdeEditorPerspective *self = (IdeEditorPerspective *)object;
+  IdeEditorPerspective *self = user_data;
+  IdeEditorAddin *addin = (IdeEditorAddin *)exten;
+  IdeLayoutView *view;
 
-  g_clear_object (&self->buffer_manager_signals);
+  g_assert (IDE_IS_EDITOR_PERSPECTIVE (self));
+  g_assert (IDE_IS_EDITOR_ADDIN (addin));
+  g_assert (PEAS_IS_EXTENSION_SET (set));
+  g_assert (plugin_info != NULL);
 
-  G_OBJECT_CLASS (ide_editor_perspective_parent_class)->finalize (object);
+  view = ide_layout_grid_get_current_view (self->grid);
+  if (view != NULL)
+    ide_editor_addin_view_set (addin, NULL);
+
+  ide_editor_addin_unload (addin, self);
 }
 
 static void
-ide_editor_perspective_view_destroyed (IdeEditorPerspective *self,
-                                       IdeLayoutView        *view)
+ide_editor_perspective_hierarchy_changed (GtkWidget *widget,
+                                          GtkWidget *old_toplevel)
 {
-  IDE_ENTRY;
+  IdeEditorPerspective *self = (IdeEditorPerspective *)widget;
 
   g_assert (IDE_IS_EDITOR_PERSPECTIVE (self));
-  g_assert (IDE_IS_LAYOUT_VIEW (view));
+  g_assert (!old_toplevel || GTK_IS_WIDGET (old_toplevel));
 
-  g_signal_emit (self, signals [VIEW_REMOVED], 0, view);
+  if (self->addins == NULL)
+    {
+      GtkWidget *toplevel;
 
-  IDE_EXIT;
+      /*
+       * If we just got a new toplevel and it is a workbench,
+       * and we have not yet created our addins, do so now.
+       */
+
+      toplevel = gtk_widget_get_ancestor (widget, IDE_TYPE_WORKBENCH);
+
+      if (toplevel != NULL)
+        {
+          self->addins = peas_extension_set_new (peas_engine_get_default (),
+                                                 IDE_TYPE_EDITOR_ADDIN,
+                                                 NULL);
+          g_signal_connect (self->addins,
+                            "extension-added",
+                            G_CALLBACK (ide_editor_perspective_addin_added),
+                            self);
+          g_signal_connect (self->addins,
+                            "extension-removed",
+                            G_CALLBACK (ide_editor_perspective_addin_removed),
+                            self);
+          peas_extension_set_foreach (self->addins,
+                                      ide_editor_perspective_addin_added,
+                                      self);
+        }
+    }
+}
+
+static void
+ide_editor_perspective_addins_view_set (PeasExtensionSet *set,
+                                        PeasPluginInfo   *plugin_info,
+                                        PeasExtension    *exten,
+                                        gpointer          user_data)
+{
+  IdeEditorAddin *addin = (IdeEditorAddin *)exten;
+  IdeLayoutView *view = user_data;
+
+  g_assert (PEAS_IS_EXTENSION_SET (set));
+  g_assert (plugin_info != NULL);
+  g_assert (IDE_IS_EDITOR_ADDIN (addin));
+  g_assert (!view || IDE_IS_LAYOUT_VIEW (view));
+
+  ide_editor_addin_view_set (addin, view);
+}
+
+static void
+ide_editor_perspective_notify_current_view (IdeEditorPerspective *self,
+                                            GParamSpec           *pspec,
+                                            IdeLayoutGrid        *grid)
+{
+  IdeLayoutView *view;
+
+  g_assert (IDE_IS_EDITOR_PERSPECTIVE (self));
+  g_assert (pspec != NULL);
+  g_assert (IDE_IS_LAYOUT_GRID (grid));
+
+  view = ide_layout_grid_get_current_view (grid);
+
+  if (IDE_IS_EDITOR_VIEW (view))
+    ide_editor_properties_set_view (self->properties, IDE_EDITOR_VIEW (view));
+  else
+    ide_editor_properties_set_view (self->properties, NULL);
+
+  peas_extension_set_foreach (self->addins,
+                              ide_editor_perspective_addins_view_set,
+                              view);
 }
 
 static void
@@ -342,248 +182,107 @@ ide_editor_perspective_add (GtkContainer *container,
   g_assert (GTK_IS_WIDGET (widget));
 
   if (IDE_IS_LAYOUT_VIEW (widget))
-    {
-      GtkWidget *last_focus;
+    gtk_container_add (GTK_CONTAINER (self->grid), widget);
+  else
+    GTK_CONTAINER_CLASS (ide_editor_perspective_parent_class)->add (container, widget);
+}
 
-      last_focus = ide_layout_grid_get_last_focus (self->grid);
-      gtk_container_add (GTK_CONTAINER (last_focus), widget);
-      g_signal_connect_object (widget,
-                               "destroy",
-                               G_CALLBACK (ide_editor_perspective_view_destroyed),
-                               self,
-                               G_CONNECT_SWAPPED);
-      g_signal_emit (self, signals [VIEW_ADDED], 0, widget);
-      return;
-    }
+static GtkWidget *
+ide_editor_perspective_create_edge (DzlDockBin      *dock_bin,
+                                    GtkPositionType  edge)
+{
+  g_assert (DZL_IS_DOCK_BIN (dock_bin));
+  g_assert (edge >= GTK_POS_LEFT);
+  g_assert (edge <= GTK_POS_BOTTOM);
 
-  GTK_CONTAINER_CLASS (ide_editor_perspective_parent_class)->add (container, widget);
+  if (edge == GTK_POS_LEFT)
+    return g_object_new (IDE_TYPE_EDITOR_SIDEBAR,
+                         "edge", edge,
+                         "reveal-child", FALSE,
+                         "visible", TRUE,
+                         NULL);
+
+  if (edge == GTK_POS_RIGHT)
+    return g_object_new (IDE_TYPE_LAYOUT_TRANSIENT_SIDEBAR,
+                         "edge", edge,
+                         "reveal-child", FALSE,
+                         "visible", TRUE,
+                         NULL);
+
+  return DZL_DOCK_BIN_CLASS (ide_editor_perspective_parent_class)->create_edge (dock_bin, edge);
 }
 
 static void
-ide_editor_perspective_grid_empty (IdeEditorPerspective *self,
-                                   IdeLayoutGrid        *grid)
+ide_editor_perspective_destroy (GtkWidget *widget)
 {
-  GtkWidget *stack;
+  IdeEditorPerspective *self = (IdeEditorPerspective *)widget;
 
   g_assert (IDE_IS_EDITOR_PERSPECTIVE (self));
-  g_assert (IDE_IS_LAYOUT_GRID (grid));
 
-  stack = gtk_widget_get_ancestor (GTK_WIDGET (grid), GTK_TYPE_STACK);
+  g_clear_object (&self->addins);
 
-  if (stack != NULL)
-    gtk_stack_set_visible_child_name (GTK_STACK (stack), "empty_state");
-}
-
-static void
-ide_editor_perspective_get_property (GObject    *object,
-                                     guint       prop_id,
-                                     GValue     *value,
-                                     GParamSpec *pspec)
-{
-  IdeEditorPerspective *self = IDE_EDITOR_PERSPECTIVE (object);
-
-  switch (prop_id)
-    {
-    case PROP_ACTIVE_VIEW:
-      g_value_set_object (value, ide_editor_perspective_get_active_view (self));
-      break;
-
-    default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
-    }
+  GTK_WIDGET_CLASS (ide_editor_perspective_parent_class)->destroy (widget);
 }
 
 static void
 ide_editor_perspective_class_init (IdeEditorPerspectiveClass *klass)
 {
-  GObjectClass *object_class = G_OBJECT_CLASS (klass);
   GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
   GtkContainerClass *container_class = GTK_CONTAINER_CLASS (klass);
+  DzlDockBinClass *dock_bin_class = DZL_DOCK_BIN_CLASS (klass);
 
-  object_class->get_property = ide_editor_perspective_get_property;
-  object_class->finalize = ide_editor_perspective_finalize;
+  widget_class->destroy = ide_editor_perspective_destroy;
+  widget_class->hierarchy_changed = ide_editor_perspective_hierarchy_changed;
 
   container_class->add = ide_editor_perspective_add;
 
+  dock_bin_class->create_edge = ide_editor_perspective_create_edge;
+
   gtk_widget_class_set_template_from_resource (widget_class, "/org/gnome/builder/ui/ide-editor-perspective.ui");
-  gtk_widget_class_bind_template_child (widget_class, IdeEditorPerspective, layout);
-  gtk_widget_class_bind_template_child (widget_class, IdeEditorPerspective, actions);
   gtk_widget_class_bind_template_child (widget_class, IdeEditorPerspective, grid);
+  gtk_widget_class_bind_template_child (widget_class, IdeEditorPerspective, properties);
 
-  properties [PROP_ACTIVE_VIEW] =
-    g_param_spec_object ("active-view",
-                         "Active View",
-                         "Active View",
-                         GTK_TYPE_WIDGET,
-                         (G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
-
-  g_object_class_install_properties (object_class, LAST_PROP, properties);
-
-  signals[VIEW_ADDED] =
-    g_signal_new ("view-added",
-                  G_TYPE_FROM_CLASS (klass),
-                  G_SIGNAL_RUN_LAST,
-                  0,
-                  NULL, NULL, NULL,
-                  G_TYPE_NONE,
-                  1,
-                  GTK_TYPE_WIDGET);
-
-  signals[VIEW_REMOVED] =
-    g_signal_new ("view-removed",
-                  G_TYPE_FROM_CLASS (klass),
-                  G_SIGNAL_RUN_LAST,
-                  0,
-                  NULL, NULL, NULL,
-                  G_TYPE_NONE,
-                  1,
-                  GTK_TYPE_WIDGET);
-}
-
-static void
-ide_editor_perspective_active_view_notify_cb (IdeEditorPerspective *self,
-                                              GParamSpec           *pspec,
-                                              IdeLayout            *layout)
-{
-  g_assert (IDE_IS_EDITOR_PERSPECTIVE (self));
-  g_assert (IDE_IS_LAYOUT (layout));
-
-  self->active_view = ide_layout_get_active_view (layout);
-  g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_ACTIVE_VIEW]);
+  g_type_ensure (IDE_TYPE_EDITOR_PROPERTIES);
+  g_type_ensure (IDE_TYPE_EDITOR_SIDEBAR);
+  g_type_ensure (IDE_TYPE_LAYOUT_GRID);
 }
 
 static void
 ide_editor_perspective_init (IdeEditorPerspective *self)
 {
-  static const gchar *proxy_actions[] = {
-    "bottom-visible",
-    "left-visible",
-    "right-visible",
-    NULL
-  };
-  static const GActionEntry entries[] = {
-    { "new-file", new_file_activate },
-  };
-
-  GActionGroup *actions;
-  guint i;
-
-  self->buffer_manager_signals = dzl_signal_group_new (IDE_TYPE_BUFFER_MANAGER);
-
-  dzl_signal_group_connect_object (self->buffer_manager_signals,
-                                   "load-buffer",
-                                   G_CALLBACK (ide_editor_perspective_load_buffer),
-                                   self,
-                                   G_CONNECT_SWAPPED);
-
-  dzl_signal_group_connect_object (self->buffer_manager_signals,
-                                   "notify::focus-buffer",
-                                   G_CALLBACK (ide_editor_perspective_notify_focus_buffer),
-                                   self,
-                                   G_CONNECT_SWAPPED);
+  IdeEditorSidebar *sidebar;
 
   gtk_widget_init_template (GTK_WIDGET (self));
 
-  g_signal_connect_object (self->grid,
-                           "empty",
-                           G_CALLBACK (ide_editor_perspective_grid_empty),
-                           self,
-                           G_CONNECT_SWAPPED);
+  sidebar = ide_editor_perspective_get_sidebar (self);
+  _ide_editor_sidebar_set_open_pages (sidebar, G_LIST_MODEL (self->grid));
 
-  g_action_map_add_action_entries (G_ACTION_MAP (self->actions), entries,
-                                   G_N_ELEMENTS (entries), self);
+  _ide_editor_perspective_init_actions (self);
+  _ide_editor_perspective_init_shortcuts (self);
 
-  actions = gtk_widget_get_action_group (GTK_WIDGET (self->layout), "dockbin");
-
-  for (i = 0; proxy_actions[i]; i++)
-    {
-      GAction *action;
-
-      action = g_action_map_lookup_action (G_ACTION_MAP (actions), proxy_actions[i]);
-      g_action_map_add_action (G_ACTION_MAP (self->actions), action);
-    }
-
-  ide_editor_perspective_restore_panel_state (self);
-
-  ide_widget_set_context_handler (GTK_WIDGET (self),
-                                  ide_editor_perspective_context_set);
-
-  g_signal_connect_swapped (self->layout,
-                            "notify::active-view",
-                            G_CALLBACK (ide_editor_perspective_active_view_notify_cb),
+  g_signal_connect_swapped (self->grid,
+                            "notify::current-view",
+                            G_CALLBACK (ide_editor_perspective_notify_current_view),
                             self);
-
-  ide_editor_perspective_active_view_notify_cb (self, NULL, self->layout);
 }
 
-static gchar *
-ide_editor_perspective_get_title (IdePerspective *perspective)
+/**
+ * ide_editor_perspective_get_grid:
+ * @self: a #IdeEditorPerspective
+ *
+ * Gets the grid for the perspective. This is the area containing
+ * grid columns, stacks, and views.
+ *
+ * Returns: (transfer none): An #IdeLayoutGrid.
+ *
+ * Since: 3.26
+ */
+IdeLayoutGrid *
+ide_editor_perspective_get_grid (IdeEditorPerspective *self)
 {
-  return g_strdup (_("Editor"));
-}
-
-static gchar *
-ide_editor_perspective_get_icon_name (IdePerspective *perspective)
-{
-  return g_strdup ("builder-editor-symbolic");
-}
-
-static gchar *
-ide_editor_perspective_get_id (IdePerspective *perspective)
-{
-  return g_strdup ("editor");
-}
-
-static void
-ide_editor_perspective_views_foreach (IdePerspective *perspective,
-                                      GtkCallback     callback,
-                                      gpointer        user_data)
-{
-  IdeEditorPerspective *self = (IdeEditorPerspective *)perspective;
-
-  g_assert (IDE_IS_EDITOR_PERSPECTIVE (self));
-
-  ide_layout_grid_foreach_view (self->grid, callback, user_data);
-}
-
-static GActionGroup *
-ide_editor_perspective_get_actions (IdePerspective *perspective)
-{
-  IdeEditorPerspective *self = (IdeEditorPerspective *)perspective;
-
   g_return_val_if_fail (IDE_IS_EDITOR_PERSPECTIVE (self), NULL);
 
-  return g_object_ref (self->actions);
-}
-
-static gboolean
-ide_editor_perspective_agree_to_shutdown (IdePerspective *perspective)
-{
-  IdeEditorPerspective *self = (IdeEditorPerspective *)perspective;
-
-  g_assert (IDE_IS_EDITOR_PERSPECTIVE (self));
-
-  ide_editor_perspective_save_panel_state (self);
-
-  return TRUE;
-}
-
-static gchar *
-ide_editor_perspective_get_accelerator (IdePerspective *perspective)
-{
-  return g_strdup ("<alt>1");
-}
-
-static void
-ide_perspective_iface_init (IdePerspectiveInterface *iface)
-{
-  iface->agree_to_shutdown = ide_editor_perspective_agree_to_shutdown;
-  iface->get_actions = ide_editor_perspective_get_actions;
-  iface->get_icon_name = ide_editor_perspective_get_icon_name;
-  iface->get_id = ide_editor_perspective_get_id;
-  iface->get_title = ide_editor_perspective_get_title;
-  iface->views_foreach = ide_editor_perspective_views_foreach;
-  iface->get_accelerator = ide_editor_perspective_get_accelerator;
+  return self->grid;
 }
 
 static void
@@ -605,7 +304,7 @@ ide_editor_perspective_find_source_location (GtkWidget *widget,
   if (!IDE_IS_EDITOR_VIEW (widget))
     return;
 
-  buffer = ide_editor_view_get_document (IDE_EDITOR_VIEW (widget));
+  buffer = ide_editor_view_get_buffer (IDE_EDITOR_VIEW (widget));
   file = ide_buffer_get_file (buffer);
 
   if (ide_file_equal (file, lookup->file))
@@ -653,6 +352,7 @@ ide_editor_perspective_focus_location_full (IdeEditorPerspective *self,
     IdeEditorView *view;
   } lookup = { 0 };
   GtkWidget *stack;
+  guint line;
 
   g_return_if_fail (IDE_IS_EDITOR_PERSPECTIVE (self));
   g_return_if_fail (location != NULL);
@@ -699,301 +399,387 @@ ide_editor_perspective_focus_location_full (IdeEditorPerspective *self,
       return;
     }
 
+  line = ide_source_location_get_line (location);
+
   stack = gtk_widget_get_ancestor (GTK_WIDGET (lookup.view), IDE_TYPE_LAYOUT_STACK);
-  ide_layout_stack_set_active_view (IDE_LAYOUT_STACK (stack), GTK_WIDGET (lookup.view));
-  ide_layout_view_navigate_to (IDE_LAYOUT_VIEW (lookup.view), location);
-  gtk_widget_grab_focus (GTK_WIDGET (lookup.view));
+  ide_layout_stack_set_visible_child (IDE_LAYOUT_STACK (stack), IDE_LAYOUT_VIEW (lookup.view));
+  ide_editor_view_scroll_to_line (lookup.view, line);
 }
 
 void
 ide_editor_perspective_focus_location (IdeEditorPerspective *self,
                                        IdeSourceLocation    *location)
 {
+  g_return_if_fail (IDE_IS_EDITOR_PERSPECTIVE (self));
+  g_return_if_fail (location != NULL);
+
   ide_editor_perspective_focus_location_full (self, location, TRUE);
 }
 
-/**
- * ide_editor_perspective_get_layout:
- * @self: A #IdeEditorPerspective
- *
- * Gets the #IdeLayout widget for the editor perspective.
- *
- * Returns: (transfer none) (nullable): A #IdeLayout or %NULL.
- */
-IdeLayout *
-ide_editor_perspective_get_layout (IdeEditorPerspective *self)
+static void
+locate_view_for_buffer (GtkWidget *widget,
+                        gpointer   user_data)
 {
-  g_return_val_if_fail (IDE_IS_EDITOR_PERSPECTIVE (self), NULL);
+  struct {
+    IdeBuffer     *buffer;
+    IdeLayoutView *view;
+  } *lookup = user_data;
 
-  return self->layout;
+  if (lookup->view != NULL)
+    return;
+
+  if (IDE_IS_EDITOR_VIEW (widget))
+    {
+      if (ide_editor_view_get_buffer (IDE_EDITOR_VIEW (widget)) == lookup->buffer)
+        lookup->view = IDE_LAYOUT_VIEW (widget);
+    }
+}
+
+static gboolean
+ide_editor_perspective_focus_if_found (IdeEditorPerspective *self,
+                                       IdeBuffer            *buffer,
+                                       gboolean              any_stack)
+{
+  IdeLayoutStack *stack;
+  struct {
+    IdeBuffer     *buffer;
+    IdeLayoutView *view;
+  } lookup = { buffer };
+
+  g_return_val_if_fail (IDE_IS_EDITOR_PERSPECTIVE (self), FALSE);
+  g_return_val_if_fail (IDE_IS_BUFFER (buffer), FALSE);
+
+  stack = ide_layout_grid_get_current_stack (self->grid);
+
+  if (any_stack)
+    ide_layout_grid_foreach_view (self->grid, locate_view_for_buffer, &lookup);
+  else
+    ide_layout_stack_foreach_view (stack, locate_view_for_buffer, &lookup);
+
+  if (lookup.view != NULL)
+    {
+      stack = IDE_LAYOUT_STACK (gtk_widget_get_ancestor (GTK_WIDGET (lookup.view),
+                                                         IDE_TYPE_LAYOUT_STACK));
+      ide_layout_stack_set_visible_child (stack, lookup.view);
+      gtk_widget_grab_focus (GTK_WIDGET (lookup.view));
+      return TRUE;
+    }
+
+  return FALSE;
+}
+
+void
+ide_editor_perspective_focus_buffer (IdeEditorPerspective *self,
+                                     IdeBuffer            *buffer)
+{
+  IdeEditorView *view;
+
+  g_return_if_fail (IDE_IS_EDITOR_PERSPECTIVE (self));
+  g_return_if_fail (IDE_IS_BUFFER (buffer));
+
+  if (ide_editor_perspective_focus_if_found (self, buffer, TRUE))
+    return;
+
+  view = g_object_new (IDE_TYPE_EDITOR_VIEW,
+                       "buffer", buffer,
+                       "visible", TRUE,
+                       NULL);
+  gtk_container_add (GTK_CONTAINER (self->grid), GTK_WIDGET (view));
+}
+
+void
+ide_editor_perspective_focus_buffer_in_current_stack (IdeEditorPerspective *self,
+                                                      IdeBuffer            *buffer)
+{
+  IdeLayoutStack *stack;
+  IdeEditorView *view;
+
+  g_return_if_fail (IDE_IS_EDITOR_PERSPECTIVE (self));
+  g_return_if_fail (IDE_IS_BUFFER (buffer));
+
+  if (ide_editor_perspective_focus_if_found (self, buffer, FALSE))
+    return;
+
+  stack = ide_layout_grid_get_current_stack (self->grid);
+
+  view = g_object_new (IDE_TYPE_EDITOR_VIEW,
+                       "buffer", buffer,
+                       "visible", TRUE,
+                       NULL);
+
+  gtk_container_add (GTK_CONTAINER (stack), GTK_WIDGET (view));
 }
 
 /**
  * ide_editor_perspective_get_active_view:
+ * @self: a #IdeEditorPerspective
  *
- * Returns: (transfer none) (nullable): An #IdeLayoutView or %NULL.
+ * Gets the active view for the perspective, or %NULL if there is not one.
+ *
+ * Returns: (nullable) (transfer none): An #IdeLayoutView or %NULL.
+ *
+ * Since: 3.26
  */
-GtkWidget *
+IdeLayoutView *
 ide_editor_perspective_get_active_view (IdeEditorPerspective *self)
 {
+  IdeLayoutStack *stack;
 
   g_return_val_if_fail (IDE_IS_EDITOR_PERSPECTIVE (self), NULL);
 
-  return self->active_view;
+  stack = ide_layout_grid_get_current_stack (self->grid);
+
+  return ide_layout_stack_get_visible_child (stack);
 }
 
 /**
- * ide_editor_perspective_get_center_widget:
- * @self: A #IdeEditorPerspective
+ * ide_editor_perspective_get_sidebar:
+ * @self: a #IdeEditorPerspective
  *
- * Gets the center widget for the editor perspective.
+ * Gets the #IdeEditorSidebar for the editor perspective.
  *
- * Returns: (transfer none) (nullable): A #GtkWidget or %NULL.
+ * Returns: (transfer none): A #IdeEditorSidebar
+ *
+ * Since: 3.26
  */
-GtkWidget *
-ide_editor_perspective_get_center_widget (IdeEditorPerspective *self)
+IdeEditorSidebar *
+ide_editor_perspective_get_sidebar (IdeEditorPerspective *self)
 {
   g_return_val_if_fail (IDE_IS_EDITOR_PERSPECTIVE (self), NULL);
 
-  return dzl_dock_bin_get_center_widget (DZL_DOCK_BIN (self->layout));
+  return IDE_EDITOR_SIDEBAR (dzl_dock_bin_get_left_edge (DZL_DOCK_BIN (self)));
 }
 
 /**
- * ide_editor_perspective_get_top_edge:
- * Returns: (transfer none): A #GtkWidget
+ * ide_editor_perspective_get_transient_sidebar:
+ * @self: a #IdeEditorPerspective
+ *
+ * Gets the transient sidebar for the editor perspective.
+ *
+ * The transient sidebar is a sidebar on the right side of the perspective. It
+ * is displayed only when necessary. It animates in and out of view based on
+ * focus tracking and other heuristics.
+ *
+ * Returns: (transfer none): An #IdeLayoutTransientSidebar
+ *
+ * Since: 3.26
  */
-GtkWidget *
-ide_editor_perspective_get_top_edge (IdeEditorPerspective *self)
+IdeLayoutTransientSidebar *
+ide_editor_perspective_get_transient_sidebar (IdeEditorPerspective *self)
 {
   g_return_val_if_fail (IDE_IS_EDITOR_PERSPECTIVE (self), NULL);
 
-  return dzl_dock_bin_get_top_edge (DZL_DOCK_BIN (self->layout));
-}
-
-/**
- * ide_editor_perspective_get_left_edge:
- * Returns: (transfer none): A #GtkWidget
- */
-GtkWidget *
-ide_editor_perspective_get_left_edge (IdeEditorPerspective *self)
-{
-  g_return_val_if_fail (IDE_IS_EDITOR_PERSPECTIVE (self), NULL);
-
-  return dzl_dock_bin_get_left_edge (DZL_DOCK_BIN (self->layout));
+  return IDE_LAYOUT_TRANSIENT_SIDEBAR (dzl_dock_bin_get_right_edge (DZL_DOCK_BIN (self)));
 }
 
 /**
  * ide_editor_perspective_get_bottom_edge:
+ *
  * Returns: (transfer none): A #GtkWidget
  */
 GtkWidget *
 ide_editor_perspective_get_bottom_edge (IdeEditorPerspective *self)
 {
   g_return_val_if_fail (IDE_IS_EDITOR_PERSPECTIVE (self), NULL);
-
-  return dzl_dock_bin_get_bottom_edge (DZL_DOCK_BIN (self->layout));
+  return dzl_dock_bin_get_bottom_edge (DZL_DOCK_BIN (self));
 }
 
-/**
- * ide_editor_perspective_get_right_edge:
- * Returns: (transfer none): A #GtkWidget
- */
-GtkWidget *
-ide_editor_perspective_get_right_edge (IdeEditorPerspective *self)
-{
-  g_return_val_if_fail (IDE_IS_EDITOR_PERSPECTIVE (self), NULL);
-
-  return dzl_dock_bin_get_right_edge (DZL_DOCK_BIN (self->layout));
-}
-
-/**
- * ide_editor_perspective_get_overlay_edge:
- * self: an #IdeEditorPerspective.
- * position: a #GtkPositionType.
- *
- * Returns: (transfer none): A #DzlDockOverlayEdge
- */
-DzlDockOverlayEdge *
-ide_editor_perspective_get_overlay_edge (IdeEditorPerspective *self,
-                                         GtkPositionType       position)
-{
-  g_return_val_if_fail (IDE_IS_EDITOR_PERSPECTIVE (self), NULL);
-
-  return dzl_dock_overlay_get_edge (DZL_DOCK_OVERLAY (self), position);
-}
-
-static GtkOrientation
-get_orientation_from_position_type (GtkPositionType position_type)
-{
-  if (position_type == GTK_POS_LEFT || position_type == GTK_POS_RIGHT)
-    return GTK_ORIENTATION_HORIZONTAL;
-  else
-    return GTK_ORIENTATION_VERTICAL;
-}
-
-/* Triggered at the start of the animation */
 static void
-overlay_child_reveal_notify_cb (IdeEditorPerspective *self,
-                                GParamSpec           *pspec,
-                                DzlDockOverlayEdge   *edge)
+set_reveal_child_without_transition (DzlDockRevealer *revealer,
+                                     gboolean         reveal)
 {
-  IdeLayoutPane *pane;
+  DzlDockRevealerTransitionType type;
+
+  g_assert (DZL_IS_DOCK_REVEALER (revealer));
+
+  type = dzl_dock_revealer_get_transition_type (revealer);
+  dzl_dock_revealer_set_transition_type (revealer, DZL_DOCK_REVEALER_TRANSITION_TYPE_NONE);
+  dzl_dock_revealer_set_reveal_child (revealer, reveal);
+  dzl_dock_revealer_set_transition_type (revealer, type);
+}
+
+static void
+ide_editor_perspective_restore_panel_state (IdeEditorPerspective *self)
+{
+  g_autoptr(GSettings) settings = NULL;
+  GtkWidget *pane;
   gboolean reveal;
+  guint position;
 
   g_assert (IDE_IS_EDITOR_PERSPECTIVE (self));
-  g_assert (DZL_IS_DOCK_OVERLAY_EDGE (edge));
 
-  gtk_container_child_get (GTK_CONTAINER (self), GTK_WIDGET (edge),
-                           "reveal", &reveal,
-                           NULL);
+  /* TODO: This belongs in editor settings probably */
 
-  if (!reveal && self->spellchecker_opened)
-    {
-      g_signal_handlers_disconnect_by_func (edge,
-                                            overlay_child_reveal_notify_cb,
-                                            self);
+  settings = g_settings_new ("org.gnome.builder.workbench");
 
-      pane = IDE_LAYOUT_PANE (dzl_dock_bin_get_right_edge (DZL_DOCK_BIN (self->layout)));
-      dzl_dock_revealer_animate_to_position (DZL_DOCK_REVEALER (pane),
-                                             self->right_pane_position,
-                                             OVERLAY_REVEAL_DURATION);
-    }
-}
+  pane = dzl_dock_bin_get_left_edge (DZL_DOCK_BIN (self));
+  reveal = g_settings_get_boolean (settings, "left-visible");
+  position = g_settings_get_int (settings, "left-position");
+  dzl_dock_revealer_set_position (DZL_DOCK_REVEALER (pane), position);
+  set_reveal_child_without_transition (DZL_DOCK_REVEALER (pane), reveal);
 
-/* Triggered at the end of the animation */
-static void
-overlay_child_revealed_notify_cb (IdeEditorPerspective *self,
-                                  GParamSpec           *pspec,
-                                  DzlDockOverlayEdge   *edge)
-{
-  GtkWidget *child;
-  gboolean revealed;
+  pane = dzl_dock_bin_get_right_edge (DZL_DOCK_BIN (self));
+  reveal = g_settings_get_boolean (settings, "right-visible");
+  position = g_settings_get_int (settings, "right-position");
+  dzl_dock_revealer_set_position (DZL_DOCK_REVEALER (pane), position);
+  set_reveal_child_without_transition (DZL_DOCK_REVEALER (pane), FALSE);
 
-  g_assert (IDE_IS_EDITOR_PERSPECTIVE (self));
-  g_assert (DZL_IS_DOCK_OVERLAY_EDGE (edge));
-
-  gtk_container_child_get (GTK_CONTAINER (self), GTK_WIDGET (edge),
-                           "revealed", &revealed,
-                           NULL);
-
-  if (!revealed && self->spellchecker_opened)
-    {
-      g_signal_handlers_disconnect_by_func (edge,
-                                            overlay_child_revealed_notify_cb,
-                                            self);
-
-      child = gtk_bin_get_child (GTK_BIN (edge));
-      g_assert (child != NULL);
-      gtk_container_remove (GTK_CONTAINER (edge), child);
-      self->spellchecker_opened = FALSE;
-    }
-  else if (revealed)
-    self->spellchecker_opened = TRUE;
+  pane = dzl_dock_bin_get_bottom_edge (DZL_DOCK_BIN (self));
+  reveal = g_settings_get_boolean (settings, "bottom-visible");
+  position = g_settings_get_int (settings, "bottom-position");
+  dzl_dock_revealer_set_position (DZL_DOCK_REVEALER (pane), position);
+  set_reveal_child_without_transition (DZL_DOCK_REVEALER (pane), reveal);
 }
 
 static void
-show_spell_checker (IdeEditorPerspective *self,
-                    DzlDockOverlayEdge   *overlay_edge,
-                    IdeLayoutPane        *pane)
+ide_editor_perspective_save_panel_state (IdeEditorPerspective *self)
 {
-  GtkOrientation pane_orientation;
-  GtkPositionType pane_position_type;
-  GtkOrientation overlay_orientation;
-  GtkPositionType overlay_position_type;
-  gint overlay_size;
+  g_autoptr(GSettings) settings = NULL;
+  GtkWidget *pane;
+  gboolean reveal;
+  guint position;
 
   g_assert (IDE_IS_EDITOR_PERSPECTIVE (self));
-  g_assert (gtk_bin_get_child (GTK_BIN (overlay_edge)) != NULL);
 
-  pane_position_type = dzl_dock_bin_edge_get_edge (DZL_DOCK_BIN_EDGE (pane));
-  overlay_position_type = dzl_dock_overlay_edge_get_edge (overlay_edge);
+  /* TODO: possibly belongs in editor settings */
+  settings = g_settings_new ("org.gnome.builder.workbench");
 
-  pane_orientation = get_orientation_from_position_type (pane_position_type);
-  overlay_orientation = get_orientation_from_position_type (overlay_position_type);
+  pane = dzl_dock_bin_get_left_edge (DZL_DOCK_BIN (self));
+  position = dzl_dock_revealer_get_position (DZL_DOCK_REVEALER (pane));
+  reveal = dzl_dock_revealer_get_reveal_child (DZL_DOCK_REVEALER (pane));
+  g_settings_set_boolean (settings, "left-visible", reveal);
+  g_settings_set_int (settings, "left-position", position);
 
-  g_assert (pane_orientation == overlay_orientation);
+  pane = dzl_dock_bin_get_right_edge (DZL_DOCK_BIN (self));
+  position = dzl_dock_revealer_get_position (DZL_DOCK_REVEALER (pane));
+  reveal = dzl_dock_revealer_get_reveal_child (DZL_DOCK_REVEALER (pane));
+  g_settings_set_boolean (settings, "right-visible", reveal);
+  g_settings_set_int (settings, "right-position", position);
 
-  if (dzl_dock_revealer_get_position_set (DZL_DOCK_REVEALER (pane)))
-    self->right_pane_position = dzl_dock_revealer_get_position (DZL_DOCK_REVEALER (pane));
-  else
-    {
-      if (overlay_orientation == GTK_ORIENTATION_HORIZONTAL)
-        gtk_widget_get_preferred_width (GTK_WIDGET (pane), NULL, &self->right_pane_position);
-      else
-        gtk_widget_get_preferred_height (GTK_WIDGET (pane), NULL, &self->right_pane_position);
-    }
-
-  if (overlay_orientation == GTK_ORIENTATION_HORIZONTAL)
-    gtk_widget_get_preferred_width (GTK_WIDGET (overlay_edge), NULL, &overlay_size);
-  else
-    gtk_widget_get_preferred_height (GTK_WIDGET (overlay_edge), NULL, &overlay_size);
-
-  g_signal_connect_object (overlay_edge,
-                           "child-notify::reveal",
-                           G_CALLBACK (overlay_child_reveal_notify_cb),
-                           self,
-                           G_CONNECT_SWAPPED);
-  g_signal_connect_object (overlay_edge,
-                           "child-notify::revealed",
-                           G_CALLBACK (overlay_child_revealed_notify_cb),
-                           self,
-                           G_CONNECT_SWAPPED);
-
-  dzl_dock_revealer_animate_to_position (DZL_DOCK_REVEALER (pane),
-                                         overlay_size,
-                                         OVERLAY_REVEAL_DURATION);
-  gtk_container_child_set (GTK_CONTAINER (self), GTK_WIDGET (overlay_edge),
-                           "reveal", TRUE,
-                           NULL);
+  pane = dzl_dock_bin_get_bottom_edge (DZL_DOCK_BIN (self));
+  position = dzl_dock_revealer_get_position (DZL_DOCK_REVEALER (pane));
+  reveal = dzl_dock_revealer_get_reveal_child (DZL_DOCK_REVEALER (pane));
+  g_settings_set_boolean (settings, "bottom-visible", reveal);
+  g_settings_set_int (settings, "bottom-position", position);
 }
 
-static GtkWidget *
-create_spellchecker_widget (IdeSourceView *source_view)
+static void
+ide_editor_perspective_views_foreach (IdePerspective *perspective,
+                                      GtkCallback     callback,
+                                      gpointer        user_data)
 {
-  GtkWidget *spellchecker_widget;
-  GtkWidget *scroll_window;
-  GtkWidget *spell_widget;
+  IdeEditorPerspective *self = (IdeEditorPerspective *)perspective;
 
-  g_assert (IDE_IS_SOURCE_VIEW (source_view));
+  g_assert (IDE_IS_EDITOR_PERSPECTIVE (self));
+  g_assert (callback != NULL);
 
-  spellchecker_widget = g_object_new (GTK_TYPE_BOX,
-                                      "visible", TRUE,
-                                      "expand", TRUE,
-                                      NULL);
-  scroll_window = g_object_new (GTK_TYPE_SCROLLED_WINDOW,
-                                "visible", TRUE,
-                                "expand", TRUE,
-                                "propagate-natural-width", TRUE,
-                                NULL);
-  spell_widget = ide_editor_spell_widget_new (source_view);
-  gtk_box_pack_start (GTK_BOX (spellchecker_widget), scroll_window, TRUE, TRUE, 0);
-  gtk_container_add (GTK_CONTAINER (scroll_window), spell_widget);
-  gtk_widget_show_all (spellchecker_widget);
+  ide_layout_grid_foreach_view (self->grid, callback, user_data);
+}
 
-  return spellchecker_widget;
+static gchar *
+ide_editor_perspective_get_id (IdePerspective *perspective)
+{
+  return g_strdup ("editor");
+}
+
+static gchar *
+ide_editor_perspective_get_icon_name (IdePerspective *perspective)
+{
+  return g_strdup ("builder-editor-symbolic");
+}
+
+static gchar *
+ide_editor_perspective_get_accelerator (IdePerspective *perspective)
+{
+  return g_strdup ("<Alt>1");
+}
+
+static gchar *
+ide_editor_perspective_get_title (IdePerspective *perspective)
+{
+  return g_strdup (_("Editor"));
+}
+
+static void
+ide_editor_perspective_restore_state (IdePerspective *perspective)
+{
+  IdeEditorPerspective *self = (IdeEditorPerspective *)perspective;
+  g_assert (IDE_IS_EDITOR_PERSPECTIVE (self));
+  ide_editor_perspective_restore_panel_state (self);
+}
+
+static gboolean
+ide_editor_perspective_agree_to_shutdown (IdePerspective *perspective)
+{
+  IdeEditorPerspective *self = (IdeEditorPerspective *)perspective;
+
+  g_assert (IDE_IS_EDITOR_PERSPECTIVE (self));
+
+  ide_editor_perspective_save_panel_state (self);
+
+  return TRUE;
+}
+
+static void
+ide_editor_perspective_set_fullscreen (IdePerspective *perspective,
+                                       gboolean        fullscreen)
+{
+  IdeEditorPerspective *self = (IdeEditorPerspective *)perspective;
+
+  g_assert (IDE_IS_EDITOR_PERSPECTIVE (self));
+
+  if (fullscreen)
+    {
+      gboolean left_visible;
+      gboolean bottom_visible;
+
+      g_object_get (self,
+                    "left-visible", &left_visible,
+                    "bottom-visible", &bottom_visible,
+                    NULL);
+
+      self->prefocus_had_left = left_visible;
+      self->prefocus_had_bottom = bottom_visible;
+
+      g_object_set (self,
+                    "left-visible", FALSE,
+                    "bottom-visible", FALSE,
+                    NULL);
+    }
+  else
+    {
+      g_object_set (self,
+                    "left-visible", self->prefocus_had_left,
+                    "bottom-visible", self->prefocus_had_bottom,
+                    NULL);
+    }
+}
+
+static void
+perspective_iface_init (IdePerspectiveInterface *iface)
+{
+  iface->agree_to_shutdown = ide_editor_perspective_agree_to_shutdown;
+  iface->get_accelerator = ide_editor_perspective_get_accelerator;
+  iface->get_icon_name = ide_editor_perspective_get_icon_name;
+  iface->get_id = ide_editor_perspective_get_id;
+  iface->get_title = ide_editor_perspective_get_title;
+  iface->restore_state = ide_editor_perspective_restore_state;
+  iface->views_foreach = ide_editor_perspective_views_foreach;
+  iface->set_fullscreen = ide_editor_perspective_set_fullscreen;
 }
 
 void
-ide_editor_perspective_show_spellchecker (IdeEditorPerspective *self,
-                                          IdeSourceView        *source_view)
+_ide_editor_perspective_show_properties (IdeEditorPerspective *self,
+                                         IdeEditorView        *view)
 {
-  GtkWidget *spellchecker_widget;
-  DzlDockOverlayEdge *overlay_edge;
-  IdeLayoutPane *pane;
+  IdeLayoutTransientSidebar *sidebar;
 
   g_return_if_fail (IDE_IS_EDITOR_PERSPECTIVE (self));
-  g_return_if_fail (IDE_IS_SOURCE_VIEW (source_view));
+  g_return_if_fail (!view || IDE_IS_EDITOR_VIEW (view));
 
-  if (!self->spellchecker_opened)
-    {
-      self->spellchecker_opened = TRUE;
-      spellchecker_widget = create_spellchecker_widget (source_view);
+  sidebar = ide_editor_perspective_get_transient_sidebar (self);
 
-      dzl_overlay_add_child (DZL_DOCK_OVERLAY (self), spellchecker_widget, "right");
-      overlay_edge = ide_editor_perspective_get_overlay_edge (self, GTK_POS_RIGHT);
-      gtk_widget_set_child_visible (GTK_WIDGET (overlay_edge), TRUE);
-
-      pane = IDE_LAYOUT_PANE (dzl_dock_bin_get_right_edge (DZL_DOCK_BIN (self->layout)));
-      show_spell_checker (self, overlay_edge, pane);
-    }
+  ide_editor_properties_set_view (self->properties, view);
+  ide_layout_transient_sidebar_set_view (sidebar, (IdeLayoutView *)view);
+  g_object_set (self, "right-visible", view != NULL, NULL);
 }

@@ -26,12 +26,6 @@ ide_perspective_real_agree_to_shutdown (IdePerspective *self)
   return TRUE;
 }
 
-static GActionGroup *
-ide_perspective_real_get_actions (IdePerspective *self)
-{
-  return NULL;
-}
-
 static gchar *
 ide_perspective_real_get_icon_name (IdePerspective *self)
 {
@@ -62,12 +56,6 @@ ide_perspective_real_get_titlebar (IdePerspective *self)
   return NULL;
 }
 
-static gint
-ide_perspective_real_get_priority (IdePerspective *self)
-{
-  return 0;
-}
-
 static void
 ide_perspective_real_set_fullscreen (IdePerspective *self,
                                      gboolean        fullscreen)
@@ -85,11 +73,9 @@ static void
 ide_perspective_default_init (IdePerspectiveInterface *iface)
 {
   iface->agree_to_shutdown = ide_perspective_real_agree_to_shutdown;
-  iface->get_actions = ide_perspective_real_get_actions;
   iface->get_icon_name = ide_perspective_real_get_icon_name;
   iface->get_id = ide_perspective_real_get_id;
   iface->get_needs_attention = ide_perspective_real_get_needs_attention;
-  iface->get_priority = ide_perspective_real_get_priority;
   iface->get_title = ide_perspective_real_get_title;
   iface->get_titlebar = ide_perspective_real_get_titlebar;
   iface->set_fullscreen = ide_perspective_real_set_fullscreen;
@@ -259,34 +245,6 @@ ide_perspective_views_foreach (IdePerspective *self,
 }
 
 /**
- * ide_perspective_get_actions:
- * @self: An #IdePerspective.
- *
- * This interface method should retrieve a #GActionGroup associated with the
- * perspective, if necessary. The #GActionGroup will automatically be
- * registered with the "perspective" action prefix while the perspective is
- * active. A perspective is "active" when it is currently displayed in the
- * workbench.
- *
- * Returns: (nullable) (transfer full): A #GActionGroup or %NULL.
- */
-GActionGroup *
-ide_perspective_get_actions (IdePerspective *self)
-{
-  g_return_val_if_fail (IDE_IS_PERSPECTIVE (self), NULL);
-
-  return IDE_PERSPECTIVE_GET_IFACE (self)->get_actions (self);
-}
-
-gint
-ide_perspective_get_priority (IdePerspective *self)
-{
-  g_return_val_if_fail (IDE_IS_PERSPECTIVE (self), 0);
-
-  return IDE_PERSPECTIVE_GET_IFACE (self)->get_priority (self);
-}
-
-/**
  * ide_perspective_is_early:
  *
  * If %TRUE, the perspective can be used before loading a project.
@@ -318,4 +276,13 @@ ide_perspective_get_accelerator (IdePerspective *self)
    return IDE_PERSPECTIVE_GET_IFACE (self)->get_accelerator (self);
 
   return NULL;
+}
+
+void
+ide_perspective_restore_state (IdePerspective *self)
+{
+  g_return_if_fail (IDE_IS_PERSPECTIVE (self));
+
+  if (IDE_PERSPECTIVE_GET_IFACE (self)->restore_state)
+    IDE_PERSPECTIVE_GET_IFACE (self)->restore_state (self);
 }

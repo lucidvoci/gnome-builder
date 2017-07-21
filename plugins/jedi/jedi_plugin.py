@@ -280,6 +280,8 @@ class DocumentationDB(object):
         # I would use scandir for better performance, but it requires newer Python
         for gir_path in GIR_PATH_LIST:
             for gir_file in os.listdir(gir_path):
+                if not gir_file.endswith('.gir'):
+                    continue
                 if gir_file in processed_gir_files:
                     continue
                 processed_gir_files[gir_file] = None
@@ -298,7 +300,11 @@ class DocumentationDB(object):
                         cursor.execute('UPDATE girfiles SET last_modified=? WHERE file=?', (mtime, filename))
                 parser = lxml.etree.XMLParser(recover=True)
                 tree = lxml.etree.parse(filename, parser=parser)
-                namespace = tree.find('core:namespace', namespaces=ns)
+                try:
+                    namespace = tree.find('core:namespace', namespaces=ns)
+                except:
+                    print("Failed to parse", filename)
+                    continue
                 library_version = namespace.attrib['version']
                 for node in namespace.findall('core:class', namespaces=ns):
                     doc = node.find('core:doc', namespaces=ns)

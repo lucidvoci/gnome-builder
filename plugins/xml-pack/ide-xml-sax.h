@@ -21,6 +21,8 @@
 
 #include <glib-object.h>
 
+#include <libxml/parser.h>
+
 G_BEGIN_DECLS
 
 #define IDE_TYPE_XML_SAX (ide_xml_sax_get_type())
@@ -39,25 +41,33 @@ enum _IdeXmlSaxCallbackType {
   IDE_XML_SAX_CALLBACK_TYPE_END_DOCUMENT,
   IDE_XML_SAX_CALLBACK_TYPE_END_ELEMENT,
   IDE_XML_SAX_CALLBACK_TYPE_ENTITY,
+  IDE_XML_SAX_CALLBACK_TYPE_INTERNAL_SUBSET,
+  IDE_XML_SAX_CALLBACK_TYPE_EXTERNAL_SUBSET,
+  IDE_XML_SAX_CALLBACK_TYPE_PROCESSING_INSTRUCTION,
   IDE_XML_SAX_CALLBACK_TYPE_WARNING,
   IDE_XML_SAX_CALLBACK_TYPE_ERROR,
   IDE_XML_SAX_CALLBACK_TYPE_FATAL_ERROR,
 };
 
-void            ide_xml_sax_clear             (IdeXmlSax              *self);
-gint            ide_xml_sax_get_depth         (IdeXmlSax              *self);
-gboolean        ide_xml_sax_get_position      (IdeXmlSax              *self,
-                                               gint                   *line,
-                                               gint                   *line_offset);
-IdeXmlSax      *ide_xml_sax_new               (void);
-gboolean        ide_xml_sax_parse             (IdeXmlSax              *self,
-                                               const gchar            *data,
-                                               gsize                   length,
-                                               const gchar            *uri,
-                                               gpointer                user_data);
-void            ide_xml_sax_set_callback      (IdeXmlSax              *self,
-                                               IdeXmlSaxCallbackType   callback_type,
-                                               gpointer                callback);
+void            ide_xml_sax_clear               (IdeXmlSax              *self);
+xmlParserCtxt  *ide_xml_sax_get_context         (IdeXmlSax              *self);
+gint            ide_xml_sax_get_depth           (IdeXmlSax              *self);
+gboolean        ide_xml_sax_get_location        (IdeXmlSax              *self,
+                                                 gint                   *start_line,
+                                                 gint                   *start_line_offset,
+                                                 gint                   *end_line,
+                                                 gint                   *end_line_offset,
+                                                 const gchar           **content,
+                                                 gsize                  *size);
+IdeXmlSax      *ide_xml_sax_new                 (void);
+gboolean        ide_xml_sax_parse               (IdeXmlSax              *self,
+                                                 const gchar            *data,
+                                                 gsize                   length,
+                                                 const gchar            *uri,
+                                                 gpointer                user_data);
+void            ide_xml_sax_set_callback        (IdeXmlSax              *self,
+                                                 IdeXmlSaxCallbackType   callback_type,
+                                                 gpointer                callback);
 
 G_END_DECLS
 

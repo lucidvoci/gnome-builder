@@ -16,8 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef SYMBOL_TREE_BUILDER_H
-#define SYMBOL_TREE_BUILDER_H
+#pragma once
 
 #include <ide.h>
 
@@ -28,5 +27,3 @@ G_BEGIN_DECLS
 G_DECLARE_FINAL_TYPE (SymbolTreeBuilder, symbol_tree_builder, SYMBOL, TREE_BUILDER, DzlTreeBuilder)
 
 G_END_DECLS
-
-#endif /* SYMBOL_TREE_BUILDER_H */

@@ -18,6 +18,7 @@
 
 #define G_LOG_DOMAIN "ide-source-snippet"
 
+#include <dazzle.h>
 #include <glib/gi18n.h>
 
 #include "ide-debug.h"
@@ -66,6 +67,8 @@ enum {
 };
 
 G_DEFINE_TYPE (IdeSourceSnippet, ide_source_snippet, G_TYPE_OBJECT)
+
+DZL_DEFINE_COUNTER (instances, "Snippets", "N Snippets", "Number of IdeSourceSnippet instances.");
 
 static GParamSpec * properties[LAST_PROP];
 
@@ -842,7 +845,7 @@ ide_source_snippet_after_insert_text (IdeSourceSnippet *self,
 
   ide_source_snippet_update_tags (self);
 
-#if 1
+#if 0
   ide_source_snippet_context_dump (self->snippet_context);
 #endif
 
@@ -946,7 +949,7 @@ ide_source_snippet_after_delete_range (IdeSourceSnippet *self,
 
   ide_source_snippet_update_tags (self);
 
-#if 1
+#if 0
   ide_source_snippet_context_dump (self->snippet_context);
 #endif
 
@@ -1045,6 +1048,8 @@ ide_source_snippet_finalize (GObject *object)
   g_clear_pointer (&self->snippet_text, g_free);
 
   G_OBJECT_CLASS (ide_source_snippet_parent_class)->finalize (object);
+
+  DZL_COUNTER_DEC (instances);
 }
 
 static void
@@ -1199,6 +1204,8 @@ ide_source_snippet_class_init (IdeSourceSnippetClass *klass)
 static void
 ide_source_snippet_init (IdeSourceSnippet *self)
 {
+  DZL_COUNTER_INC (instances);
+
   self->max_tab_stop = -1;
   self->chunks = g_ptr_array_new_with_free_func (g_object_unref);
   self->runs = g_array_new (FALSE, FALSE, sizeof (gint));

@@ -160,31 +160,8 @@ save_as_cb (GObject      *object,
     }
   else
     {
-      if (view->bottom_has_focus && view->terminal_bottom != NULL)
-        {
-          g_clear_object (&view->save_as_file_bottom);
-          view->save_as_file_bottom = file;
-        }
-      else
-        {
-          g_clear_object (&view->save_as_file_top);
-          view->save_as_file_top = file;
-        }
-    }
-}
-
-static void
-save_cb (GObject      *object,
-         GAsyncResult *result,
-         gpointer      user_data)
-{
-  GbTerminalView *view = user_data;
-  GError *error = NULL;
-
-  if (!gb_terminal_view_actions_save_finish (view, result, &error))
-    {
-      g_warning ("%s", error->message);
-      g_clear_error (&error);
+      g_clear_object (&view->save_as_file_top);
+      view->save_as_file_top = file;
     }
 }
 
@@ -193,12 +170,7 @@ get_last_focused_terminal_file (GbTerminalView *view)
 {
   GFile *file = NULL;
 
-  if (view->bottom_has_focus)
-    {
-      if (G_IS_FILE (view->save_as_file_bottom))
-        file = view->save_as_file_bottom;
-    }
-  else if G_IS_FILE (view->save_as_file_top)
+  if (G_IS_FILE (view->save_as_file_top))
     file = view->save_as_file_top;
 
   return file;
@@ -207,18 +179,12 @@ get_last_focused_terminal_file (GbTerminalView *view)
 static VteTerminal *
 get_last_focused_terminal (GbTerminalView *view)
 {
-  VteTerminal *terminal;
-
-  if (view->bottom_has_focus && view->terminal_bottom != NULL)
-    terminal = view->terminal_bottom;
-  else
-    terminal = view->terminal_top;
-
-  return terminal;
+  return view->terminal_top;
 }
 
 static gchar *
-gb_terminal_get_selected_text (GbTerminalView *view, VteTerminal **terminal_p)
+gb_terminal_get_selected_text (GbTerminalView  *view,
+                               VteTerminal    **terminal_p)
 {
   VteTerminal *terminal;
   gchar *buf = NULL;
@@ -317,34 +283,39 @@ gb_terminal_view_actions_save_as (GSimpleAction *action,
 }
 
 static void
-gb_terminal_view_actions_save (GSimpleAction *action,
-                               GVariant      *param,
-                               gpointer       user_data)
+gb_terminal_view_actions_reset (GSimpleAction *action,
+                                GVariant      *param,
+                                gpointer       user_data)
 {
-  GbTerminalView *view = user_data;
+  GbTerminalView *self = user_data;
   VteTerminal *terminal;
-  GFile *file = NULL;
 
-  g_assert (GB_IS_TERMINAL_VIEW (view));
+  g_assert (G_IS_SIMPLE_ACTION (action));
+  g_assert (GB_IS_TERMINAL_VIEW (self));
 
-  file = get_last_focused_terminal_file (view);
-  if (file != NULL)
-    {
-      /* We can't get this later because the dialog make the terminal
-       * unfocused and thus reset the selection
-       */
-      view->selection_buffer = gb_terminal_get_selected_text (view, &terminal);
-      gb_terminal_view_actions_save_async (view, terminal, file, save_cb, NULL, view);
-    }
-  else
-    {
-      gb_terminal_view_actions_save_as (action, param, user_data);
-    }
+  terminal = get_last_focused_terminal (self);
+  vte_terminal_reset (terminal, TRUE, FALSE);
+}
+
+static void
+gb_terminal_view_actions_reset_and_clear (GSimpleAction *action,
+                                          GVariant      *param,
+                                          gpointer       user_data)
+{
+  GbTerminalView *self = user_data;
+  VteTerminal *terminal;
+
+  g_assert (G_IS_SIMPLE_ACTION (action));
+  g_assert (GB_IS_TERMINAL_VIEW (self));
+
+  terminal = get_last_focused_terminal (self);
+  vte_terminal_reset (terminal, TRUE, TRUE);
 }
 
 static GActionEntry GbTerminalViewActions[] = {
-  { "save", gb_terminal_view_actions_save },
   { "save-as", gb_terminal_view_actions_save_as },
+  { "reset", gb_terminal_view_actions_reset },
+  { "reset-and-clear", gb_terminal_view_actions_reset_and_clear },
 };
 
 void
@@ -355,5 +326,5 @@ gb_terminal_view_actions_init (GbTerminalView *self)
   group = g_simple_action_group_new ();
   g_action_map_add_action_entries (G_ACTION_MAP (group), GbTerminalViewActions,
                                    G_N_ELEMENTS (GbTerminalViewActions), self);
-  gtk_widget_insert_action_group (GTK_WIDGET (self), "view", G_ACTION_GROUP (group));
+  gtk_widget_insert_action_group (GTK_WIDGET (self), "terminal-view", G_ACTION_GROUP (group));
 }

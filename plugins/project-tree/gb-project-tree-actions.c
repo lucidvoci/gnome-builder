@@ -726,7 +726,7 @@ gb_project_tree_actions_close_views_cb (GtkWidget *widget,
     {
       IdeBuffer *buffer;
 
-      buffer = ide_editor_view_get_document (IDE_EDITOR_VIEW (view));
+      buffer = ide_editor_view_get_buffer (IDE_EDITOR_VIEW (view));
 
       if (buffer == removal->document)
         removal->views = g_list_prepend (removal->views, g_object_ref (view));
@@ -782,11 +782,10 @@ gb_project_tree_actions_move_to_trash (GSimpleAction *action,
    */
   for (iter = removal.views; iter; iter = iter->next)
     {
-      GtkWidget *stack;
+      IdeLayoutView *view = iter->data;
 
-      stack = gtk_widget_get_ancestor (iter->data, IDE_TYPE_LAYOUT_STACK);
-      if (stack != NULL)
-        ide_layout_stack_remove (IDE_LAYOUT_STACK (stack), iter->data);
+      if (IDE_IS_EDITOR_VIEW (view))
+        gtk_widget_destroy (GTK_WIDGET (view));
     }
 
   g_list_free_full (removal.views, g_object_unref);

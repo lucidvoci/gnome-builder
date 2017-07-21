@@ -21,6 +21,6 @@ Contents
    projects/index
    plugins/index
    howto/index
-   api/index
+   troubleshooting
    contributing/index
    credits

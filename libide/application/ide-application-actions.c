@@ -23,7 +23,9 @@
 
 #include <glib/gi18n.h>
 
+#include "ide-build-ident.h"
 #include "ide-debug.h"
+#include "ide-version.h"
 
 #include "application/ide-application.h"
 #include "application/ide-application-actions.h"
@@ -113,16 +115,15 @@ ide_application_actions_about (GSimpleAction *action,
         }
     }
 
-  version = g_string_new (PACKAGE_VERSION);
+  version = g_string_new (NULL);
 
-#ifdef COMMIT_ID
-  g_string_append (version, "+"COMMIT_ID);
-#endif
+  if (g_str_has_prefix (IDE_BUILD_TYPE, "debug"))
+    g_string_append (version, IDE_BUILD_IDENTIFIER);
+  else
+    g_string_append (version, PACKAGE_VERSION);
 
-#ifdef CHANNEL
-  if (g_strcmp0 (CHANNEL, "distro") != 0)
-    g_string_append (version, " ("CHANNEL")");
-#endif
+  if (g_strcmp0 (IDE_BUILD_CHANNEL, "other") != 0)
+    g_string_append (version, "\n" IDE_BUILD_CHANNEL);
 
   dialog = g_object_new (GTK_TYPE_ABOUT_DIALOG,
                          "artists", ide_application_credits_artists,
@@ -179,16 +180,16 @@ ide_application_actions_help_cb (GObject      *object,
    * We failed to reach the online site for some reason (offline, transient error, etc),
    * so instead try to load the local documentation.
    */
-  if (g_file_test (PACKAGE_DOCDIR"/html/index.html", G_FILE_TEST_IS_REGULAR))
+  if (g_file_test (PACKAGE_DOCDIR"/en/index.html", G_FILE_TEST_IS_REGULAR))
     {
       const gchar *uri;
       g_autofree gchar *real_uri = NULL;
       g_autoptr(GError) error = NULL;
 
       if (ide_is_flatpak ())
-        uri = real_uri = ide_flatpak_get_app_path ("/share/doc/gnome-builder/html/index.html");
+        uri = real_uri = ide_flatpak_get_app_path ("/share/doc/gnome-builder/en/index.html");
       else
-        uri = "file://"PACKAGE_DOCDIR"/html/index.html";
+        uri = "file://"PACKAGE_DOCDIR"/en/index.html";
 
       if (!gtk_show_uri_on_window (focused_window, uri, gtk_get_current_event_time (), &error))
         g_warning ("Failed to load documentation: %s", error->message);
@@ -415,15 +416,13 @@ static const GActionEntry IdeApplicationActions[] = {
 void
 ide_application_actions_init (IdeApplication *self)
 {
-  static const gchar *left[] = { "F9", NULL };
-  static const gchar *right[] = { "<shift>F9", NULL };
-  static const gchar *bottom[] = { "<control>F9", NULL };
   static const gchar *global_search[] = { "<control>period", NULL };
   static const gchar *new_file[] = { "<control>n", NULL };
   static const gchar *shortcuts[] = { "<control>F1", "<control><shift>question", NULL };
   static const gchar *help[] = { "F1", NULL };
   static const gchar *command_bar[] = { "<ctrl>Return", "<ctrl>KP_Enter", NULL };
   static const gchar *build[] = { "<ctrl>F7", NULL };
+  static const gchar *fullscreen[] = { "F11", NULL };
 
   g_action_map_add_action_entries (G_ACTION_MAP (self), IdeApplicationActions,
                                    G_N_ELEMENTS (IdeApplicationActions), self);
@@ -433,10 +432,8 @@ ide_application_actions_init (IdeApplication *self)
    */
   gtk_application_set_accels_for_action (GTK_APPLICATION (self), "app.help", help);
   gtk_application_set_accels_for_action (GTK_APPLICATION (self), "app.shortcuts", shortcuts);
-  gtk_application_set_accels_for_action (GTK_APPLICATION (self), "dockbin.bottom-visible", bottom);
-  gtk_application_set_accels_for_action (GTK_APPLICATION (self), "dockbin.left-visible", left);
-  gtk_application_set_accels_for_action (GTK_APPLICATION (self), "dockbin.right-visible", right);
   gtk_application_set_accels_for_action (GTK_APPLICATION (self), "perspective.new-file", new_file);
+  gtk_application_set_accels_for_action (GTK_APPLICATION (self), "win.fullscreen", fullscreen);
   gtk_application_set_accels_for_action (GTK_APPLICATION (self), "win.global-search", global_search);
   gtk_application_set_accels_for_action (GTK_APPLICATION (self), "win.show-command-bar", command_bar);
   gtk_application_set_accels_for_action (GTK_APPLICATION (self), "build-manager.build", build);

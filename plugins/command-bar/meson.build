@@ -33,7 +33,6 @@ command_bar_sources = [
 
 command_bar_deps = plugin_deps + [
   libgd_dep,
-  libnautilus_dep,
 ]
 
 shared_module('command-bar', command_bar_sources,
@@ -44,6 +43,12 @@ shared_module('command-bar', command_bar_sources,
   install_dir: plugindir,
 )
 
-install_data('command-bar.plugin', install_dir: plugindir)
+configure_file(
+          input: 'command-bar.plugin',
+         output: 'command-bar.plugin',
+  configuration: configuration_data(),
+        install: true,
+    install_dir: plugindir,
+)
 
 endif

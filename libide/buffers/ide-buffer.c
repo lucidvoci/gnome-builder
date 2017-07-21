@@ -19,26 +19,26 @@
 #define G_LOG_DOMAIN "ide-buffer"
 
 #include <dazzle.h>
-#include <dazzle.h>
 #include <glib/gi18n.h>
-#include <gspell/gspell.h>
 
 #include "ide-context.h"
 #include "ide-debug.h"
 #include "ide-internal.h"
 
+#include "buffers/ide-buffer-addin.h"
 #include "buffers/ide-buffer-change-monitor.h"
-#include "buffers/ide-buffer.h"
+#include "buffers/ide-buffer-manager.h"
+#include "buffers/ide-buffer-private.h"
 #include "buffers/ide-unsaved-files.h"
 #include "diagnostics/ide-diagnostic.h"
-#include "diagnostics/ide-diagnostics.h"
 #include "diagnostics/ide-diagnostics-manager.h"
+#include "diagnostics/ide-diagnostics.h"
 #include "diagnostics/ide-source-location.h"
 #include "diagnostics/ide-source-range.h"
 #include "files/ide-file-settings.h"
 #include "files/ide-file.h"
-#include "formatting/ide-formatter.h"
 #include "formatting/ide-formatter-options.h"
+#include "formatting/ide-formatter.h"
 #include "highlighting/ide-highlight-engine.h"
 #include "highlighting/ide-highlighter.h"
 #include "plugins/ide-extension-adapter.h"
@@ -52,6 +52,7 @@
 #include "vcs/ide-vcs.h"
 
 #define DEFAULT_DIAGNOSE_TIMEOUT_MSEC          333
+#define SETTLING_DELAY_MSEC                    333
 #define DEFAULT_DIAGNOSE_CONSERVE_TIMEOUT_MSEC 5000
 #define RECLAIMATION_TIMEOUT_SECS              1
 #define MODIFICATION_TIMEOUT_SECS              1
@@ -81,7 +82,7 @@ typedef struct
   IdeExtensionAdapter    *formatter_adapter;
   IdeExtensionAdapter    *rename_provider_adapter;
   IdeExtensionAdapter    *symbol_resolver_adapter;
-  GspellChecker          *spellchecker;
+  PeasExtensionSet       *addins;
   gchar                  *title;
 
   DzlSignalGroup         *file_signals;
@@ -99,8 +100,11 @@ typedef struct
   gint                    hold_count;
   guint                   reclamation_handler;
 
+  guint                   settling_handler;
+
   gsize                   change_count;
 
+  guint                   cancel_cursor_restore : 1;
   guint                   changed_on_volume : 1;
   guint                   highlight_diagnostics : 1;
   guint                   loading : 1;
@@ -127,6 +131,7 @@ enum {
 };
 
 enum {
+  CHANGE_SETTLED,
   CURSOR_MOVED,
   DESTROY,
   LINE_FLAGS_CHANGED,
@@ -139,46 +144,31 @@ enum {
 static GParamSpec *properties [LAST_PROP];
 static guint signals [LAST_SIGNAL];
 
-void
-ide_buffer_set_spell_checking (IdeBuffer *self,
-                               gboolean   enable)
+static gboolean
+ide_buffer_settled_cb (gpointer user_data)
 {
+  IdeBuffer *self = user_data;
   IdeBufferPrivate *priv = ide_buffer_get_instance_private (self);
-  GspellTextBuffer *spell_text_buffer;
 
-  g_return_if_fail (IDE_IS_BUFFER (self));
+  g_assert (IDE_IS_BUFFER (self));
 
-  if (enable)
-    {
-      if (!GSPELL_IS_CHECKER (priv->spellchecker))
-        {
-          priv->spellchecker = gspell_checker_new (NULL);
-          spell_text_buffer = gspell_text_buffer_get_from_gtk_text_buffer (GTK_TEXT_BUFFER (self));
-          gspell_text_buffer_set_spell_checker (spell_text_buffer, priv->spellchecker);
-        }
-    }
-  else
-    {
-      if (GSPELL_IS_CHECKER (priv->spellchecker))
-        {
-          spell_text_buffer = gspell_text_buffer_get_from_gtk_text_buffer (GTK_TEXT_BUFFER (self));
-          gspell_text_buffer_set_spell_checker (spell_text_buffer, NULL);
-          g_clear_object (&priv->spellchecker);
-        }
-    }
+  priv->settling_handler = 0;
+  g_signal_emit (self, signals [CHANGE_SETTLED], 0);
+
+  return G_SOURCE_REMOVE;
 }
 
-gboolean
-ide_buffer_get_spell_checking (IdeBuffer *self)
+static void
+ide_buffer_delay_settling (IdeBuffer *self)
 {
   IdeBufferPrivate *priv = ide_buffer_get_instance_private (self);
 
-  g_return_val_if_fail (IDE_IS_BUFFER (self), FALSE);
+  g_assert (IDE_IS_BUFFER (self));
 
-  /* We keep a ref on the spellchecker because using gspell_text_buffer_get_from_gtk_text_buffer
-   * and gspell_text_buffer_get_spell_checker always return a valid spellchecker
-   */
-  return GSPELL_IS_CHECKER (priv->spellchecker);
+  ide_clear_source (&priv->settling_handler);
+  priv->settling_handler = gdk_threads_add_timeout (SETTLING_DELAY_MSEC,
+                                                    ide_buffer_settled_cb,
+                                                    self);
 }
 
 /**
@@ -617,7 +607,7 @@ ide_buffer_reload_change_monitor (IdeBuffer *self)
       g_clear_object (&priv->change_monitor);
     }
 
-  if (priv->context && priv->file)
+  if (!priv->loading && priv->context && priv->file)
     {
       IdeVcs *vcs;
 
@@ -687,6 +677,8 @@ ide_buffer_changed (GtkTextBuffer *buffer)
   priv->change_count++;
 
   g_clear_pointer (&priv->content, g_bytes_unref);
+
+  ide_buffer_delay_settling (self);
 }
 
 static void
@@ -1073,6 +1065,9 @@ ide_buffer_loaded (IdeBuffer *self)
   if (priv->change_monitor != NULL)
     ide_buffer_change_monitor_reload (priv->change_monitor);
 
+  /* This is suspended until we've loaded */
+  ide_highlight_engine_unpause (priv->highlight_engine);
+
   IDE_EXIT;
 }
 
@@ -1140,6 +1135,46 @@ ide_buffer_load_symbol_resolver (IdeBuffer           *self,
     }
 
   IDE_EXIT;
+}
+
+static void
+ide_buffer_addin_added (PeasExtensionSet *set,
+                        PeasPluginInfo   *plugin_info,
+                        PeasExtension    *exten,
+                        gpointer          user_data)
+{
+  IdeBufferAddin *addin = (IdeBufferAddin *)exten;
+  IdeBuffer *self = user_data;
+
+  g_assert (PEAS_IS_EXTENSION_SET (set));
+  g_assert (plugin_info != NULL);
+  g_assert (IDE_IS_BUFFER_ADDIN (addin));
+  g_assert (IDE_IS_BUFFER (self));
+
+  g_debug ("loading IdeBufferAddin from %s",
+           peas_plugin_info_get_module_name (plugin_info));
+
+  ide_buffer_addin_load (addin, self);
+}
+
+static void
+ide_buffer_addin_removed (PeasExtensionSet *set,
+                          PeasPluginInfo   *plugin_info,
+                          PeasExtension    *exten,
+                          gpointer          user_data)
+{
+  IdeBufferAddin *addin = (IdeBufferAddin *)exten;
+  IdeBuffer *self = user_data;
+
+  g_assert (PEAS_IS_EXTENSION_SET (set));
+  g_assert (plugin_info != NULL);
+  g_assert (IDE_IS_BUFFER_ADDIN (addin));
+  g_assert (IDE_IS_BUFFER (self));
+
+  g_debug ("unloading IdeBufferAddin from %s",
+           peas_plugin_info_get_module_name (plugin_info));
+
+  ide_buffer_addin_unload (addin, self);
 }
 
 static void
@@ -1225,6 +1260,23 @@ ide_buffer_constructed (GObject *object)
                            G_CONNECT_SWAPPED);
 
   priv->highlight_engine = ide_highlight_engine_new (self);
+  ide_highlight_engine_pause (priv->highlight_engine);
+
+  priv->addins = peas_extension_set_new (peas_engine_get_default (),
+                                         IDE_TYPE_BUFFER_ADDIN,
+                                         NULL);
+
+  g_signal_connect (priv->addins,
+                    "extension-added",
+                    G_CALLBACK (ide_buffer_addin_added),
+                    self);
+
+  g_signal_connect (priv->addins,
+                    "extension-removed",
+                    G_CALLBACK (ide_buffer_addin_removed),
+                    self);
+
+  peas_extension_set_foreach (priv->addins, ide_buffer_addin_added, self);
 
   priv->formatter_adapter = ide_extension_adapter_new (priv->context,
                                                        NULL,
@@ -1283,13 +1335,18 @@ ide_buffer_dispose (GObject *object)
 
   IDE_ENTRY;
 
-  if (priv->check_modified_timeout != 0)
+  ide_clear_source (&priv->settling_handler);
+  ide_clear_source (&priv->reclamation_handler);
+  ide_clear_source (&priv->check_modified_timeout);
+
+  if (priv->context != NULL)
     {
-      g_source_remove (priv->check_modified_timeout);
-      priv->check_modified_timeout = 0;
+      IdeBufferManager *buffer_manager = ide_context_get_buffer_manager (priv->context);
+
+      _ide_buffer_manager_reclaim (buffer_manager, self);
     }
 
-  if (priv->file_monitor)
+  if (priv->file_monitor != NULL)
     {
       g_file_monitor_cancel (priv->file_monitor);
       g_clear_object (&priv->file_monitor);
@@ -1300,7 +1357,7 @@ ide_buffer_dispose (GObject *object)
   if (priv->highlight_engine != NULL)
     g_object_run_dispose (G_OBJECT (priv->highlight_engine));
 
-  if (priv->change_monitor)
+  if (priv->change_monitor != NULL)
     {
       ide_clear_signal_handler (priv->change_monitor, &priv->change_monitor_changed_handler);
       g_clear_object (&priv->change_monitor);
@@ -1313,18 +1370,10 @@ ide_buffer_dispose (GObject *object)
   g_clear_pointer (&priv->content, g_bytes_unref);
   g_clear_pointer (&priv->title, g_free);
   g_clear_object (&priv->file);
+  g_clear_object (&priv->addins);
   g_clear_object (&priv->highlight_engine);
   g_clear_object (&priv->rename_provider_adapter);
   g_clear_object (&priv->symbol_resolver_adapter);
-  g_clear_object (&priv->spellchecker);
-
-  if (priv->context != NULL)
-    {
-      g_object_weak_unref (G_OBJECT (priv->context),
-                           ide_buffer_release_context,
-                           self);
-      priv->context = NULL;
-    }
 
   G_OBJECT_CLASS (ide_buffer_parent_class)->dispose (object);
 
@@ -1339,13 +1388,13 @@ ide_buffer_finalize (GObject *object)
 
   IDE_ENTRY;
 
-  if (priv->reclamation_handler != 0)
+  if (priv->context != NULL)
     {
-      g_source_remove (priv->reclamation_handler);
-      priv->reclamation_handler = 0;
+      g_object_weak_unref (G_OBJECT (priv->context),
+                           ide_buffer_release_context,
+                           self);
+      priv->context = NULL;
     }
-
-  ide_clear_weak_pointer (&priv->context);
 
   G_OBJECT_CLASS (ide_buffer_parent_class)->finalize (object);
 
@@ -1521,6 +1570,25 @@ ide_buffer_class_init (IdeBufferClass *klass)
   g_object_class_install_properties (object_class, LAST_PROP, properties);
 
   /**
+   * IdeBuffer::change-settled:
+   * @self: An #IdeBuffer
+   *
+   * This signal is emitted as short period of time after changes have
+   * occurred. It provides plugins a convenient way to wait for the editor
+   * to settle before performing expensive work.
+   *
+   * You should probably use this instead of implementing your own
+   * settling management.
+   *
+   * Since: 3.26
+   */
+  signals [CHANGE_SETTLED] =
+    g_signal_new ("change-settled",
+                  G_TYPE_FROM_CLASS (klass),
+                  G_SIGNAL_RUN_LAST,
+                  0, NULL, NULL, NULL, G_TYPE_NONE, 0);
+
+  /**
    * IdeBuffer::cursor-moved:
    * @self: An #IdeBuffer.
    * @location: A #GtkTextIter.
@@ -1615,6 +1683,8 @@ ide_buffer_init (IdeBuffer *self)
   IdeBufferPrivate *priv = ide_buffer_get_instance_private (self);
 
   IDE_ENTRY;
+
+  priv->loading = TRUE;
 
   priv->highlight_diagnostics = TRUE;
 
@@ -2438,7 +2508,7 @@ ide_buffer_rehighlight (IdeBuffer *self)
   g_return_if_fail (IDE_IS_BUFFER (self));
 
   /* In case we are disposing */
-  if (priv->highlight_engine == NULL)
+  if (priv->highlight_engine == NULL || priv->loading)
     IDE_EXIT;
 
   if (gtk_source_buffer_get_highlight_syntax (GTK_SOURCE_BUFFER (self)))
@@ -2926,4 +2996,30 @@ ide_buffer_format_selection_finish (IdeBuffer     *self,
   ret = g_task_propagate_boolean (G_TASK (result), error);
 
   IDE_RETURN (ret);
+}
+
+void
+_ide_buffer_cancel_cursor_restore (IdeBuffer *self)
+{
+  IdeBufferPrivate *priv = ide_buffer_get_instance_private (self);
+  g_return_if_fail (IDE_IS_BUFFER (self));
+  priv->cancel_cursor_restore = TRUE;
+}
+
+gboolean
+_ide_buffer_can_restore_cursor (IdeBuffer *self)
+{
+  IdeBufferPrivate *priv = ide_buffer_get_instance_private (self);
+  g_return_val_if_fail (IDE_IS_BUFFER (self), FALSE);
+  return !priv->cancel_cursor_restore;
+}
+
+PeasExtensionSet *
+_ide_buffer_get_addins (IdeBuffer *self)
+{
+  IdeBufferPrivate *priv = ide_buffer_get_instance_private (self);
+
+  g_return_val_if_fail (IDE_IS_BUFFER (self), NULL);
+
+  return priv->addins;
 }

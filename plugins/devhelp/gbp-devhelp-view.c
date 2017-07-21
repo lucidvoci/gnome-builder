@@ -64,30 +64,23 @@ gbp_devhelp_view_set_uri (GbpDevhelpView *self,
   webkit_web_view_load_uri (self->web_view1, uri);
 }
 
-static gchar *
-gbp_devhelp_view_get_title (IdeLayoutView *view)
-{
-  GbpDevhelpView *self = (GbpDevhelpView *)view;
-
-  g_assert (GBP_IS_DEVHELP_VIEW (view));
-
-  return g_strdup (webkit_web_view_get_title (self->web_view1));
-}
-
 static void
 gbp_devhelp_view_notify_title (GbpDevhelpView *self,
                                GParamSpec     *pspec,
                                WebKitWebView  *web_view)
 {
+  const gchar *title;
+
   g_assert (GBP_IS_DEVHELP_VIEW (self));
   g_assert (WEBKIT_IS_WEB_VIEW (web_view));
 
-  g_object_notify (G_OBJECT (self), "title");
+  title = webkit_web_view_get_title (self->web_view1);
+
+  ide_layout_view_set_title (IDE_LAYOUT_VIEW (self), title);
 }
 
 static IdeLayoutView *
-gbp_devhelp_view_create_split (IdeLayoutView *view,
-                               GFile         *file)
+gbp_devhelp_view_create_split_view (IdeLayoutView *view)
 {
   GbpDevhelpView *self = (GbpDevhelpView *)view;
   GbpDevhelpView *other;
@@ -102,6 +95,23 @@ gbp_devhelp_view_create_split (IdeLayoutView *view,
                         NULL);
 
   return IDE_LAYOUT_VIEW (other);
+}
+
+static void
+gbp_devhelp_view_actions_print (GSimpleAction *action,
+                                GVariant      *param,
+                                gpointer       user_data)
+{
+  GbpDevhelpView *self = user_data;
+  WebKitPrintOperation *operation;
+  GtkWidget *window;
+
+  g_assert (GBP_IS_DEVHELP_VIEW (self));
+
+  operation = webkit_print_operation_new (self->web_view1);
+  window = gtk_widget_get_ancestor (GTK_WIDGET (self), GTK_TYPE_WINDOW);
+  webkit_print_operation_run_dialog (operation, GTK_WINDOW (window));
+  g_object_unref (operation);
 }
 
 static void
@@ -151,8 +161,7 @@ gbp_devhelp_view_class_init (GbpDevhelpViewClass *klass)
 
   object_class->set_property = gbp_devhelp_view_set_property;
 
-  view_class->get_title = gbp_devhelp_view_get_title;
-  view_class->create_split = gbp_devhelp_view_create_split;
+  view_class->create_split_view = gbp_devhelp_view_create_split_view;
 
   properties [PROP_URI] =
     g_param_spec_string ("uri",
@@ -183,10 +192,20 @@ gbp_devhelp_view_class_init (GbpDevhelpViewClass *klass)
   g_type_ensure (WEBKIT_TYPE_WEB_VIEW);
 }
 
+static const GActionEntry actions[] = {
+  { "print", gbp_devhelp_view_actions_print },
+};
+
 static void
 gbp_devhelp_view_init (GbpDevhelpView *self)
 {
+  g_autoptr(GSimpleActionGroup) group = NULL;
+
   gtk_widget_init_template (GTK_WIDGET (self));
+
+  ide_layout_view_set_can_split (IDE_LAYOUT_VIEW (self), TRUE);
+  ide_layout_view_set_icon_name (IDE_LAYOUT_VIEW (self), "devhelp-symbolic");
+  ide_layout_view_set_menu_id (IDE_LAYOUT_VIEW (self), "devhelp-view-document-menu");
 
   self->search = g_object_new (GBP_TYPE_DEVHELP_SEARCH, NULL);
   self->search_revealer = gbp_devhelp_search_get_revealer (self->search);
@@ -210,4 +229,13 @@ gbp_devhelp_view_init (GbpDevhelpView *self)
                            G_CALLBACK (gbp_devhelp_focus_in_event),
                            self,
                            G_CONNECT_SWAPPED);
+
+  group = g_simple_action_group_new ();
+  g_action_map_add_action_entries (G_ACTION_MAP (group),
+                                   actions,
+                                   G_N_ELEMENTS (actions),
+                                   self);
+  gtk_widget_insert_action_group (GTK_WIDGET (self),
+                                  "devhelp-view",
+                                  G_ACTION_GROUP (group));
 }

@@ -151,11 +151,10 @@ ide_application_discover_plugins (IdeApplication *self)
       peas_engine_prepend_search_path (engine, plugins_dir, plugins_dir);
     }
 
-  g_irepository_require (NULL, "Ide", "1.0", 0, &error);
-  if (error != NULL)
-    {
-      g_warning ("Cannot enable Python 3 plugins: %s", error->message);
-    }
+  if (!g_irepository_require (NULL, "Ide", "1.0", 0, &error) ||
+      !g_irepository_require (NULL, "Gtk", "3.0", 0, &error) ||
+      !g_irepository_require (NULL, "Dazzle", "1.0", 0, &error))
+    g_warning ("Cannot enable Python 3 plugins: %s", error->message);
   else
     {
       /* Avoid spamming stderr with Ide import tracebacks */
@@ -247,7 +246,7 @@ ide_application_plugins_load_plugin_gresources (IdeApplication *self,
 
   module_dir = peas_plugin_info_get_module_dir (plugin_info);
   module_name = peas_plugin_info_get_module_name (plugin_info);
-  gresources_basename = g_strdup_printf ("%s.gresources", module_name);
+  gresources_basename = g_strdup_printf ("%s.gresource", module_name);
   gresources_path = g_build_filename (module_dir, gresources_basename, NULL);
 
   if (g_file_test (gresources_path, G_FILE_TEST_IS_REGULAR))
@@ -322,6 +321,14 @@ ide_application_load_plugins (IdeApplication *self)
       if (!g_settings_get_boolean (settings, "enabled"))
         continue;
 
+      /*
+       * If we are running the unit tests, we don't want to load plugins here,
+       * but defer until the test is loading to perform the loading.  However,
+       * we do want all of the other machinery above to be setup.
+       */
+      if (self->mode == IDE_APPLICATION_MODE_TESTS)
+        continue;
+
       if (ide_application_can_load_plugin (self, plugin_info))
         {
           g_debug ("Loading plugin \"%s\"",
@@ -393,6 +400,7 @@ ide_application_load_plugin_resources (IdeApplication *self,
                                        PeasEngine     *engine)
 {
   g_autofree gchar *path = NULL;
+  const gchar *data_dir;
   const gchar *module_name;
 
   g_assert (IDE_IS_APPLICATION (self));
@@ -402,8 +410,15 @@ ide_application_load_plugin_resources (IdeApplication *self,
   ide_application_plugins_load_plugin_gresources (self, plugin_info, engine);
 
   module_name = peas_plugin_info_get_module_name (plugin_info);
-  path = g_strdup_printf ("/org/gnome/builder/plugins/%s", module_name);
-  dzl_application_add_resource_path (DZL_APPLICATION (self), path);
+  data_dir = peas_plugin_info_get_data_dir (plugin_info);
+
+  /* Add embedded resources path */
+  path = g_strdup_printf ("resource:///org/gnome/builder/plugins/%s", module_name);
+  dzl_application_add_resources (DZL_APPLICATION (self), path);
+
+  /* If the data dir is not also a resource, add it */
+  if (!g_str_has_prefix (data_dir, "resource://"))
+    dzl_application_add_resources (DZL_APPLICATION (self), data_dir);
 }
 
 static void
@@ -412,6 +427,7 @@ ide_application_unload_plugin_resources (IdeApplication *self,
                                          PeasEngine     *engine)
 {
   g_autofree gchar *path = NULL;
+  const gchar *data_dir;
   const gchar *module_name;
 
   g_assert (IDE_IS_APPLICATION (self));
@@ -419,8 +435,15 @@ ide_application_unload_plugin_resources (IdeApplication *self,
   g_assert (PEAS_IS_ENGINE (engine));
 
   module_name = peas_plugin_info_get_module_name (plugin_info);
-  path = g_strdup_printf ("/org/gnome/builder/plugins/%s", module_name);
-  dzl_application_remove_resource_path (DZL_APPLICATION (self), path);
+  data_dir = peas_plugin_info_get_data_dir (plugin_info);
+
+  /* Remove embedded gresources */
+  path = g_strdup_printf ("resource:///org/gnome/builder/plugins/%s", module_name);
+  dzl_application_remove_resources (DZL_APPLICATION (self), path);
+
+  /* Remove on disk resources */
+  if (!g_str_has_prefix (data_dir, "resource://"))
+    dzl_application_remove_resources (DZL_APPLICATION (self), data_dir);
 
   ide_application_plugins_unload_plugin_gresources (self, plugin_info, engine);
 }

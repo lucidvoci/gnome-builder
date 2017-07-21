@@ -79,6 +79,8 @@ typedef struct
   GtkSourceFileLoader  *loader;
   guint                 is_new : 1;
   IdeWorkbenchOpenFlags flags;
+  guint                 line;
+  guint                 line_offset;
 } LoadState;
 
 typedef struct
@@ -381,15 +383,13 @@ ide_buffer_manager_buffer_changed (IdeBufferManager *self,
 }
 
 static void
-ide_buffer_manager_add_buffer (IdeBufferManager *self,
-                               IdeBuffer        *buffer)
+ide_buffer_manager_track_buffer (IdeBufferManager *self,
+                                 IdeBuffer        *buffer)
 {
   IDE_ENTRY;
 
   g_return_if_fail (IDE_IS_BUFFER_MANAGER (self));
   g_return_if_fail (IDE_IS_BUFFER (buffer));
-
-  g_ptr_array_add (self->buffers, g_object_ref (buffer));
 
   if (self->auto_save)
     register_auto_save (self, buffer);
@@ -402,21 +402,49 @@ ide_buffer_manager_add_buffer (IdeBufferManager *self,
                            self,
                            (G_CONNECT_SWAPPED | G_CONNECT_AFTER));
 
-  DZL_COUNTER_INC (registered);
-
   g_list_model_items_changed (G_LIST_MODEL (self), self->buffers->len - 1, 0, 1);
 
   IDE_EXIT;
 }
 
 static void
+ide_buffer_manager_save_cursor_position (IdeBufferManager *self,
+                                         IdeBuffer        *buffer)
+{
+  g_autofree gchar *position = NULL;
+  g_autoptr(GError) error = NULL;
+  IdeFile *file;
+  GFile *gfile;
+  GtkTextIter iter;
+
+  g_assert (IDE_IS_BUFFER_MANAGER (self));
+  g_assert (IDE_IS_BUFFER (buffer));
+
+  /* FIXME: We should have a metadata manager like gedit which is owned by the
+   *        context. That would allow us to do this asynchronously and block
+   *        on synchronization during unload.
+   */
+
+  file = ide_buffer_get_file (buffer);
+  if (ide_file_get_is_temporary (file))
+    return;
+
+  gfile = ide_file_get_file (file);
+
+  gtk_text_buffer_get_iter_at_mark (GTK_TEXT_BUFFER (buffer), &iter,
+                                    gtk_text_buffer_get_insert (GTK_TEXT_BUFFER (buffer)));
+  position = g_strdup_printf ("%u:%u",
+                              gtk_text_iter_get_line (&iter),
+                              gtk_text_iter_get_line_offset (&iter));
+
+  if (!g_file_set_attribute_string (gfile, IDE_FILE_ATTRIBUTE_POSITION, position, 0, NULL, &error))
+    g_warning ("Failed to persist cursor position: %s", error->message);
+}
+
+static void
 ide_buffer_manager_remove_buffer (IdeBufferManager *self,
                                   IdeBuffer        *buffer)
 {
-  IdeUnsavedFiles *unsaved_files;
-  IdeContext *context;
-  IdeFile *file;
-  GFile *gfile;
   gint position = -1;
 
   IDE_ENTRY;
@@ -426,7 +454,9 @@ ide_buffer_manager_remove_buffer (IdeBufferManager *self,
 
   for (guint i = 0; i < self->buffers->len; i++)
     {
-      if ((gpointer)buffer == g_ptr_array_index (self->buffers, i))
+      IdeBuffer *ele = g_ptr_array_index (self->buffers, i);
+
+      if (ele == buffer)
         {
           position = i;
           break;
@@ -434,16 +464,16 @@ ide_buffer_manager_remove_buffer (IdeBufferManager *self,
     }
 
   if (position == -1)
-    IDE_EXIT;
+    {
+      IDE_TRACE_MSG ("failed to locate buffer %p within buffer manager", buffer);
+      IDE_EXIT;
+    }
 
+  /* Stash the cursor position for next time we open the file */
+  ide_buffer_manager_save_cursor_position (self, buffer);
+
+  /* Stealing ownership from self->buffers */
   g_ptr_array_remove_index (self->buffers, position);
-
-  file = ide_buffer_get_file (buffer);
-  gfile = ide_file_get_file (file);
-
-  context = ide_object_get_context (IDE_OBJECT (self));
-  unsaved_files = ide_context_get_unsaved_files (context);
-  ide_unsaved_files_remove (unsaved_files, gfile);
 
   gtk_source_completion_words_unregister (self->word_completion, GTK_TEXT_BUFFER (buffer));
 
@@ -469,6 +499,7 @@ ide_buffer_manager_remove_buffer (IdeBufferManager *self,
   g_signal_emit_by_name (buffer, "destroy");
   g_object_run_dispose (G_OBJECT (buffer));
 
+  /* We stole ownership from self->buffers */
   g_object_unref (buffer);
 
   DZL_COUNTER_DEC (registered);
@@ -510,17 +541,16 @@ ide_buffer_manager_load_file__load_cb (GObject      *object,
   g_autofree gchar *guess_contents = NULL;
   g_autofree gchar *content_type = NULL;
   GtkSourceFileLoader *loader = (GtkSourceFileLoader *)object;
-  IdeBackForwardList *back_forward_list;
-  IdeBackForwardItem *item;
   IdeBufferManager *self;
   const gchar *path;
   IdeContext *context;
   LoadState *state;
   GtkTextIter iter;
   GtkTextIter end;
-  GError *error = NULL;
+  g_autoptr(GError) error = NULL;
   gboolean uncertain = TRUE;
-  gsize i;
+
+  IDE_ENTRY;
 
   g_assert (G_IS_TASK (task));
   g_assert (GTK_SOURCE_IS_FILE_LOADER (loader));
@@ -535,73 +565,50 @@ ide_buffer_manager_load_file__load_cb (GObject      *object,
 
   context = ide_object_get_context (IDE_OBJECT (self));
 
+  /*
+   * Always track the buffer so that we can clean things up
+   * properly when teh buffer is disposed.
+   */
+  if (state->is_new)
+    {
+      g_ptr_array_add (self->buffers, g_object_ref (state->buffer));
+      DZL_COUNTER_INC (registered);
+    }
+
   if (!gtk_source_file_loader_load_finish (loader, result, &error))
     {
       /*
        * It's okay if we fail because the file does not exist yet.
+       *
+       * TODO: Add "Failed" state to buffers so we can display something
+       *       other than the sourceview in the editor perspective.
        */
       if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
         {
-          _ide_buffer_set_loading (state->buffer, FALSE);
-          g_task_return_error (task, error);
-          return;
+          g_task_return_error (task, g_steal_pointer (&error));
+          IDE_EXIT;
         }
-
-      g_clear_error (&error);
     }
 
   gtk_text_buffer_set_modified (GTK_TEXT_BUFFER (state->buffer), FALSE);
 
-  for (i = 0; i < self->buffers->len; i++)
-    {
-      IdeBuffer *cur_buffer;
-
-      cur_buffer = g_ptr_array_index (self->buffers, i);
-
-      if (cur_buffer == state->buffer)
-        goto emit_signal;
-    }
-
   if (state->is_new)
-    ide_buffer_manager_add_buffer (self, state->buffer);
+    ide_buffer_manager_track_buffer (self, state->buffer);
 
-  /*
-   * If we have a navigation item for this buffer, restore the insert mark to
-   * the most recent navigation point.
-   */
-  back_forward_list = ide_context_get_back_forward_list (context);
-  item = _ide_back_forward_list_find (back_forward_list, state->file);
-
-  gtk_text_buffer_get_start_iter (GTK_TEXT_BUFFER (state->buffer), &iter);
-
-  if (item != NULL && g_settings_get_boolean (self->settings, "restore-insert-mark"))
-    {
-      const gchar *fragment;
-      IdeUri *uri;
-
-      uri = ide_back_forward_item_get_uri (item);
-      fragment = ide_uri_get_fragment (uri);
-
-      if (fragment != NULL)
-        {
-          guint line = 0;
-          guint line_offset = 0;
-
-          if (sscanf (fragment, "L%u_%u", &line, &line_offset) >= 1)
-            {
-              IDE_TRACE_MSG ("Restoring insert mark to %u:%u", line, line_offset);
-              gtk_text_buffer_get_iter_at_line_offset (GTK_TEXT_BUFFER (state->buffer), &iter,
-                                                       line, line_offset);
-            }
-        }
-    }
+  /* try to restore the insertion cursor */
+  if (g_settings_get_boolean (self->settings, "restore-insert-mark"))
+    gtk_text_buffer_get_iter_at_line_offset (GTK_TEXT_BUFFER (state->buffer), &iter,
+                                             state->line, state->line_offset);
   else
-    {
-      IDE_TRACE_MSG ("Restoring insert mark to 0:0");
-      gtk_text_buffer_get_start_iter (GTK_TEXT_BUFFER (state->buffer), &iter);
-    }
+    gtk_text_buffer_get_start_iter (GTK_TEXT_BUFFER (state->buffer), &iter);
 
-  gtk_text_buffer_select_range (GTK_TEXT_BUFFER (state->buffer), &iter, &iter);
+  if (_ide_buffer_can_restore_cursor (state->buffer))
+    {
+      IDE_TRACE_MSG ("Restoring insert mark to %u:%u",
+                     gtk_text_iter_get_line (&iter) + 1,
+                     gtk_text_iter_get_line_offset (&iter) + 1);
+      gtk_text_buffer_select_range (GTK_TEXT_BUFFER (state->buffer), &iter, &iter);
+    }
 
   /*
    * Try to discover the content type more accurately now that we have access to the
@@ -617,15 +624,14 @@ ide_buffer_manager_load_file__load_cb (GObject      *object,
   if (content_type && !uncertain)
     _ide_file_set_content_type (state->file, content_type);
 
-emit_signal:
-  _ide_buffer_set_loading (state->buffer, FALSE);
-
   if (!_ide_context_is_restoring (context))
     ide_buffer_manager_set_focus_buffer (self, state->buffer);
 
   g_signal_emit (self, signals [BUFFER_LOADED], 0, state->buffer);
 
   g_task_return_pointer (task, g_object_ref (state->buffer), g_object_unref);
+
+  IDE_EXIT;
 }
 
 static void
@@ -660,7 +666,6 @@ ide_buffer_manager__load_file_query_info_cb (GObject      *object,
     {
       if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND))
         {
-          _ide_buffer_set_loading (state->buffer, FALSE);
           g_task_return_error (task, error);
           IDE_EXIT;
         }
@@ -696,11 +701,24 @@ ide_buffer_manager__load_file_query_info_cb (GObject      *object,
       _ide_buffer_set_mtime (state->buffer, &tv);
     }
 
+  if (file_info && g_file_info_has_attribute (file_info, IDE_FILE_ATTRIBUTE_POSITION))
+    {
+      const gchar *attr = g_file_info_get_attribute_string (file_info, IDE_FILE_ATTRIBUTE_POSITION);
+      guint line = 0;
+      guint line_offset = 0;
+
+      if (attr != NULL && sscanf (attr, "%u:%u", &line, &line_offset) >= 1)
+        {
+          state->line = line;
+          state->line_offset = line_offset;
+        }
+    }
+
   create_new_view = (state->flags & IDE_WORKBENCH_OPEN_FLAGS_BACKGROUND) ? FALSE : state->is_new;
   g_signal_emit (self, signals [LOAD_BUFFER], 0, state->buffer, create_new_view);
 
   gtk_source_file_loader_load_async (state->loader,
-                                     G_PRIORITY_DEFAULT,
+                                     G_PRIORITY_LOW,
                                      g_task_get_cancellable (task),
                                      ide_progress_file_progress_callback,
                                      g_object_ref (state->progress),
@@ -746,7 +764,8 @@ ide_buffer_manager__load_file_read_cb (GObject      *object,
   g_file_query_info_async (file,
                            G_FILE_ATTRIBUTE_STANDARD_SIZE","
                            G_FILE_ATTRIBUTE_ACCESS_CAN_WRITE","
-                           G_FILE_ATTRIBUTE_TIME_MODIFIED,
+                           G_FILE_ATTRIBUTE_TIME_MODIFIED","
+                           IDE_FILE_ATTRIBUTE_POSITION,
                            G_FILE_QUERY_INFO_NONE,
                            G_PRIORITY_DEFAULT,
                            g_task_get_cancellable (task),
@@ -849,7 +868,6 @@ ide_buffer_manager_load_file_async (IdeBufferManager       *self,
 
   _ide_buffer_set_mtime (state->buffer, NULL);
   _ide_buffer_set_changed_on_volume (state->buffer, FALSE);
-  _ide_buffer_set_loading (state->buffer, TRUE);
 
   g_task_set_task_data (task, state, load_state_free);
 
@@ -1213,6 +1231,8 @@ ide_buffer_manager_real_buffer_loaded (IdeBufferManager *self,
   recent_data.is_private = FALSE;
 
   gtk_recent_manager_add_full (recent_manager, uri, &recent_data);
+
+  _ide_buffer_set_loading (buffer, FALSE);
 }
 
 static IdeBuffer *
@@ -1230,6 +1250,38 @@ ide_buffer_manager_real_create_buffer (IdeBufferManager *self,
                        "context", context,
                        "file", file,
                        NULL);
+}
+
+static void
+ide_buffer_manager_real_buffer_unloaded (IdeBufferManager *self,
+                                         IdeBuffer        *buffer)
+{
+  IDE_ENTRY;
+
+  g_assert (IDE_IS_BUFFER_MANAGER (self));
+  g_assert (IDE_IS_BUFFER (buffer));
+
+  /*
+   * If this buffer is not modified, then we want to release any
+   * drafts associated with it as they are not necessary anymore.
+   */
+
+  if (!gtk_text_buffer_get_modified (GTK_TEXT_BUFFER (buffer)))
+    {
+      IdeUnsavedFiles *unsaved_files;
+      IdeContext *context;
+      IdeFile *file;
+      GFile *gfile;
+
+      context = ide_buffer_get_context (buffer);
+      unsaved_files = ide_context_get_unsaved_files (context);
+
+      if (NULL != (file = ide_buffer_get_file (buffer)) &&
+          NULL != (gfile = ide_file_get_file (file)))
+        ide_unsaved_files_remove (unsaved_files, gfile);
+    }
+
+  IDE_EXIT;
 }
 
 static GType
@@ -1486,14 +1538,14 @@ ide_buffer_manager_class_init (IdeBufferManagerClass *klass)
    * changes from the host file-system.
    */
   signals [LOAD_BUFFER] = g_signal_new ("load-buffer",
-                                         G_TYPE_FROM_CLASS (klass),
-                                         G_SIGNAL_RUN_LAST,
-                                         0,
-                                         NULL, NULL, NULL,
-                                         G_TYPE_NONE,
-                                         2,
-                                         IDE_TYPE_BUFFER,
-                                         G_TYPE_BOOLEAN);
+                                        G_TYPE_FROM_CLASS (klass),
+                                        G_SIGNAL_RUN_LAST,
+                                        0,
+                                        NULL, NULL, NULL,
+                                        G_TYPE_NONE,
+                                        2,
+                                        IDE_TYPE_BUFFER,
+                                        G_TYPE_BOOLEAN);
 
   /**
    * IdeBufferManager::buffer-loaded:
@@ -1553,14 +1605,16 @@ ide_buffer_manager_class_init (IdeBufferManagerClass *klass)
    * @buffer: An #IdeBuffer
    *
    * This signal is emitted when the buffer is unloaded. This allows consumers to access the
-   * buffer before the items-changed signal is emitted for which it is too late to get
-   * a pointer to the buffer.
+   * buffer before the items-changed signal is emitted; at which point it will be too late to
+   * get a pointer to the buffer.
    */
-  signals [BUFFER_UNLOADED] = g_signal_new ("buffer-unloaded",
-                                            G_TYPE_FROM_CLASS (klass),
-                                            G_SIGNAL_RUN_LAST,
-                                            0, NULL, NULL, NULL,
-                                            G_TYPE_NONE, 1, IDE_TYPE_BUFFER);
+  signals [BUFFER_UNLOADED] =
+    g_signal_new_class_handler ("buffer-unloaded",
+                                G_TYPE_FROM_CLASS (klass),
+                                G_SIGNAL_RUN_LAST,
+                                G_CALLBACK (ide_buffer_manager_real_buffer_unloaded),
+                                NULL, NULL, NULL,
+                                G_TYPE_NONE, 1, IDE_TYPE_BUFFER);
 
   g_type_ensure (GTK_SOURCE_TYPE_FILE_LOADER);
   g_type_ensure (GTK_SOURCE_TYPE_FILE_SAVER);
@@ -1802,7 +1856,11 @@ ide_buffer_manager_create_temporary_buffer (IdeBufferManager *self)
 
   g_signal_emit (self, signals [CREATE_BUFFER], 0, file, &buffer);
   g_signal_emit (self, signals [LOAD_BUFFER], 0, buffer, TRUE);
-  ide_buffer_manager_add_buffer (self, buffer);
+
+  g_ptr_array_add (self->buffers, g_object_ref (buffer));
+  DZL_COUNTER_INC (registered);
+  ide_buffer_manager_track_buffer (self, buffer);
+
   g_signal_emit (self, signals [BUFFER_LOADED], 0, buffer);
 
   return buffer;

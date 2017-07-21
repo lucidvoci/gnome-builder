@@ -16,35 +16,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <string.h>
+
 #include "ide-xml-tree-builder-utils-private.h"
 
-void
-print_node (IdeXmlSymbolNode *node,
-            guint             depth)
-{
-  g_autofree gchar *spacer;
-  gint line;
-  gint line_offset;
-
-  g_return_if_fail (IDE_IS_XML_SYMBOL_NODE (node) || node == NULL);
-
-  if (node == NULL)
-    {
-      g_warning ("Node NULL");
-      return;
-    }
-
-  spacer = g_strnfill (depth, '\t');
-  ide_xml_symbol_node_get_location (node, &line, &line_offset);
-
-  printf ("%s%s (%i) at (%i,%i) %p\n",
-          spacer,
-          ide_symbol_node_get_name (IDE_SYMBOL_NODE (node)),
-          depth,
-          line,
-          line_offset,
-          node);
-}
+#define HREF_LEN 6
 
 const gchar *
 list_get_attribute (const guchar **attributes,
@@ -67,3 +43,42 @@ list_get_attribute (const guchar **attributes,
 
   return NULL;
 }
+
+gchar *
+get_schema_url (const gchar *data)
+{
+  gchar *begin;
+  gchar *end;
+
+  if (NULL != (begin = strstr (data, "href=\"")))
+    {
+      end = begin += HREF_LEN;
+      while (end != NULL)
+        {
+          if (NULL != (end = strchr (begin, '"')))
+            {
+              if (*(end - 1) != '\\')
+                return g_strndup (begin, end - begin);
+            }
+        }
+    }
+
+  return NULL;
+}
+
+const gchar *
+get_schema_kind_string (IdeXmlSchemaKind kind)
+{
+  if (kind == SCHEMA_KIND_NONE)
+    return "No schema";
+  else if (kind == SCHEMA_KIND_DTD)
+    return "DTD schema (.dtd or internal)";
+  else if (kind == SCHEMA_KIND_RNG)
+    return "RNG schema (.rng)";
+  else if (kind == SCHEMA_KIND_XML_SCHEMA)
+    return "XML schema (.xsd)";
+
+  g_assert_not_reached ();
+}
+
+

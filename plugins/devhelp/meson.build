@@ -9,6 +9,10 @@ devhelp_resources = gnome.compile_resources(
 devhelp_sources = [
   'gbp-devhelp-documentation-provider.c',
   'gbp-devhelp-documentation-provider.h',
+  'gbp-devhelp-menu-button.c',
+  'gbp-devhelp-menu-button.h',
+  'gbp-devhelp-layout-stack-addin.c',
+  'gbp-devhelp-layout-stack-addin.h',
   'gbp-devhelp-editor-view-addin.c',
   'gbp-devhelp-editor-view-addin.h',
   'gbp-devhelp-panel.c',
@@ -19,13 +23,11 @@ devhelp_sources = [
   'gbp-devhelp-search-private.h',
   'gbp-devhelp-view.c',
   'gbp-devhelp-view.h',
-  'gbp-devhelp-workbench-addin.c',
-  'gbp-devhelp-workbench-addin.h',
   devhelp_resources[0],
 ]
 
 devhelp_deps = plugin_deps + [
-  dependency('libdevhelp-3.0', version: '>=3.25.2'),
+  dependency('libdevhelp-3.0', version: '>=3.25.1'),
   libgd_dep,
 ]
 
@@ -37,6 +39,12 @@ shared_module('devhelp-plugin', devhelp_sources,
    install_dir: plugindir,
 )
 
-install_data('devhelp.plugin', install_dir: plugindir)
+configure_file(
+          input: 'devhelp.plugin',
+         output: 'devhelp.plugin',
+  configuration: configuration_data(),
+        install: true,
+    install_dir: plugindir,
+)
 
 endif

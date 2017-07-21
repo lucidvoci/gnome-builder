@@ -77,11 +77,10 @@ static GParamSpec *properties [LAST_PROP];
 ret_type ide_file_settings_get_##name (IdeFileSettings *self) \
 { \
   IdeFileSettingsPrivate *priv = ide_file_settings_get_instance_private (self); \
-  gsize i; \
   g_return_val_if_fail (IDE_IS_FILE_SETTINGS (self), (ret_type)0); \
-  if (priv->children != NULL) \
+  if (!ide_file_settings_get_##name##_set (self) && priv->children != NULL) \
     { \
-      for (i = 0; i < priv->children->len; i++) \
+      for (guint i = 0; i < priv->children->len; i++) \
         { \
           IdeFileSettings *child = g_ptr_array_index (priv->children, i); \
           if (ide_file_settings_get_##name##_set (child)) \
@@ -109,7 +108,7 @@ void ide_file_settings_set_##name (IdeFileSettings *self, \
 { \
   IdeFileSettingsPrivate *priv = ide_file_settings_get_instance_private (self); \
   g_return_if_fail (IDE_IS_FILE_SETTINGS (self)); \
-  assign_stmt \
+  G_STMT_START { assign_stmt } G_STMT_END; \
   priv->name##_set = TRUE; \
   g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_##NAME]); \
   g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_##NAME##_SET]); \

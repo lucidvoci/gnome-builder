@@ -18,6 +18,7 @@
 
 #define G_LOG_DOMAIN "ide-workbench"
 
+#include <dazzle.h>
 #include <glib/gi18n.h>
 
 #include "ide-debug.h"
@@ -26,22 +27,22 @@
 #include "application/ide-application.h"
 #include "application/ide-application-actions.h"
 #include "editor/ide-editor-perspective.h"
+#include "layout/ide-layout-pane.h"
+#include "layout/ide-layout-view.h"
+#include "layout/ide-layout.h"
 #include "greeter/ide-greeter-perspective.h"
 #include "preferences/ide-preferences-perspective.h"
 #include "util/ide-gtk.h"
 #include "util/ide-window-settings.h"
-#include "workbench/ide-layout-pane.h"
-#include "workbench/ide-layout-stack.h"
-#include "workbench/ide-layout-view.h"
-#include "workbench/ide-layout.h"
 #include "workbench/ide-workbench-addin.h"
 #include "workbench/ide-workbench-header-bar.h"
 #include "workbench/ide-workbench-private.h"
 #include "workbench/ide-workbench.h"
 
 #define STABLIZE_DELAY_MSEC 50
+#define SHOW_HEADER_OFFSET  5
 
-G_DEFINE_TYPE (IdeWorkbench, ide_workbench, GTK_TYPE_APPLICATION_WINDOW)
+G_DEFINE_TYPE (IdeWorkbench, ide_workbench, DZL_TYPE_APPLICATION_WINDOW)
 
 enum {
   PROP_0,
@@ -67,31 +68,27 @@ ide_workbench_notify_visible_child (IdeWorkbench *self,
                                     GParamSpec   *pspec,
                                     GtkStack     *stack)
 {
-  GActionGroup *actions = NULL;
-  IdePerspective *perspective;
+  GtkWidget *perspective;
 
   g_assert (IDE_IS_WORKBENCH (self));
   g_assert (GTK_IS_STACK (stack));
 
-  perspective = IDE_PERSPECTIVE (gtk_stack_get_visible_child (stack));
+  perspective = gtk_stack_get_visible_child (stack);
+
   if (perspective != NULL)
-    actions = ide_perspective_get_actions (perspective);
+    {
+      g_autofree gchar *icon_name = NULL;
 
-  gtk_widget_insert_action_group (GTK_WIDGET (self), "perspective", actions);
+      gtk_container_child_get (GTK_CONTAINER (stack), perspective,
+                               "icon-name", &icon_name,
+                               NULL);
+      g_object_set (self->perspective_menu_button,
+                    "icon-name", icon_name,
+                    NULL);
+    }
 
-  g_clear_object (&actions);
-}
-
-static gint
-ide_workbench_compare_perspective (gconstpointer a,
-                                   gconstpointer b,
-                                   gpointer      data_unused)
-{
-  IdePerspective *perspective_a = (IdePerspective *)a;
-  IdePerspective *perspective_b = (IdePerspective *)b;
-
-  return (ide_perspective_get_priority (perspective_a) -
-          ide_perspective_get_priority (perspective_b));
+  /* Mux the actions from the perspective for the header bar */
+  dzl_gtk_widget_mux_action_groups (GTK_WIDGET (self), perspective, "IDE_PERSPECTIVE_ACTIONS");
 }
 
 static void
@@ -192,6 +189,42 @@ ide_workbench_delete_event (GtkWidget   *widget,
 }
 
 static void
+ide_workbench_grab_focus (GtkWidget *widget)
+{
+  IdeWorkbench *self = (IdeWorkbench *)widget;
+  GtkWidget *child;
+
+  g_assert (IDE_IS_WORKBENCH (self));
+
+  child = gtk_stack_get_visible_child (self->perspectives_stack);
+  if (child != NULL)
+    gtk_widget_grab_focus (child);
+}
+
+static void
+ide_workbench_notify_fullscreen (GtkWidget *widget,
+                                 gpointer   user_data)
+{
+  if (IDE_IS_PERSPECTIVE (widget))
+    ide_perspective_set_fullscreen (IDE_PERSPECTIVE (widget), !!user_data);
+}
+
+static void
+ide_workbench_set_fullscreen (DzlApplicationWindow *window,
+                              gboolean              fullscreen)
+{
+  IdeWorkbench *self = (IdeWorkbench *)window;
+
+  g_assert (IDE_IS_WORKBENCH (self));
+
+  DZL_APPLICATION_WINDOW_CLASS (ide_workbench_parent_class)->set_fullscreen (window, fullscreen);
+
+  gtk_container_foreach (GTK_CONTAINER (self->perspectives_stack),
+                         ide_workbench_notify_fullscreen,
+                         GINT_TO_POINTER (fullscreen));
+}
+
+static void
 ide_workbench_constructed (GObject *object)
 {
   IdeWorkbench *self = (IdeWorkbench *)object;
@@ -225,7 +258,6 @@ ide_workbench_finalize (GObject *object)
 
   g_clear_object (&self->context);
   g_clear_object (&self->cancellable);
-  g_clear_object (&self->perspectives);
 
   G_OBJECT_CLASS (ide_workbench_parent_class)->finalize (object);
 }
@@ -293,13 +325,17 @@ ide_workbench_class_init (IdeWorkbenchClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
   GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
+  DzlApplicationWindowClass *app_win_class = DZL_APPLICATION_WINDOW_CLASS (klass);
 
   object_class->constructed = ide_workbench_constructed;
   object_class->finalize = ide_workbench_finalize;
   object_class->get_property = ide_workbench_get_property;
   object_class->set_property = ide_workbench_set_property;
 
+  widget_class->grab_focus = ide_workbench_grab_focus;
   widget_class->delete_event = ide_workbench_delete_event;
+
+  app_win_class->set_fullscreen = ide_workbench_set_fullscreen;
 
   /**
    * IdeWorkbench:context:
@@ -421,8 +457,6 @@ ide_workbench_init (IdeWorkbench *self)
 
   gtk_widget_init_template (GTK_WIDGET (self));
 
-  self->perspectives = g_list_store_new (IDE_TYPE_PERSPECTIVE);
-
   ide_window_settings_register (GTK_WINDOW (self));
 
   g_signal_connect_object (self->perspectives_stack,
@@ -433,6 +467,11 @@ ide_workbench_init (IdeWorkbench *self)
 
   window_group = gtk_window_group_new ();
   gtk_window_group_add_window (window_group, GTK_WINDOW (self));
+
+  g_signal_connect_swapped (self,
+                            "key-press-event",
+                            G_CALLBACK (dzl_shortcut_manager_handle_event),
+                            dzl_shortcut_manager_get_default ());
 }
 
 static void
@@ -528,14 +567,37 @@ ide_workbench_get_context (IdeWorkbench *self)
   return self->context;
 }
 
+static void
+ide_workbench_restore_perspectives (IdePerspective *perspective,
+                                    IdeWorkbench   *self)
+{
+  g_assert (IDE_IS_PERSPECTIVE (perspective));
+  g_assert (IDE_IS_WORKBENCH (self));
+
+  ide_perspective_restore_state (perspective);
+}
+
 static gboolean
 restore_in_timeout (gpointer data)
 {
-  g_autoptr(IdeContext) context = data;
+  g_autoptr(IdeWorkbench) self = data;
 
-  g_assert (IDE_IS_CONTEXT (context));
+  g_assert (IDE_IS_WORKBENCH (self));
 
-  ide_context_restore_async (context, NULL, NULL, NULL);
+  if (self->context != NULL)
+    {
+      g_autoptr(GSettings) settings = NULL;
+
+      /* Ask perspectives to restore state */
+      gtk_container_foreach (GTK_CONTAINER (self->perspectives_stack),
+                             (GtkCallback) ide_workbench_restore_perspectives,
+                             self);
+
+      /* Restore previous files when needed */
+      settings = g_settings_new ("org.gnome.builder");
+      if (g_settings_get_boolean (settings, "restore-previous-files"))
+        ide_context_restore_async (self->context, NULL, NULL, NULL);
+    }
 
   return G_SOURCE_REMOVE;
 }
@@ -572,19 +634,17 @@ void
 ide_workbench_set_context (IdeWorkbench *self,
                            IdeContext   *context)
 {
-  g_autoptr(GSettings) settings = NULL;
   IdeBuildManager *build_manager;
   IdeRunManager *run_manager;
   IdeProject *project;
   guint delay_msec;
+  guint duration = 0;
 
   IDE_ENTRY;
 
   g_return_if_fail (IDE_IS_WORKBENCH (self));
   g_return_if_fail (IDE_IS_CONTEXT (context));
   g_return_if_fail (self->context == NULL);
-
-  settings = g_settings_new ("org.gnome.builder");
 
   g_set_object (&self->context, context);
 
@@ -636,14 +696,9 @@ ide_workbench_set_context (IdeWorkbench *self,
    * the stack transition results in non-smooth transitions. So instead,
    * we will delay until the transition has completed.
    */
-  if (g_settings_get_boolean (settings, "restore-previous-files"))
-    {
-      guint duration = 0;
-
-      if (!self->disable_greeter)
-        duration = gtk_stack_get_transition_duration (self->perspectives_stack);
-      g_timeout_add (delay_msec + duration, restore_in_timeout, g_object_ref (context));
-    }
+  if (!self->disable_greeter)
+    delay_msec = gtk_stack_get_transition_duration (self->perspectives_stack);
+  g_timeout_add (delay_msec + duration, restore_in_timeout, g_object_ref (self));
 
   IDE_EXIT;
 }
@@ -679,21 +734,6 @@ ide_workbench_add_perspective (IdeWorkbench   *self,
                                        "name", id,
                                        NULL);
 
-  if (!IDE_IS_GREETER_PERSPECTIVE (perspective))
-    {
-      guint position = 0;
-
-      gtk_container_child_get (GTK_CONTAINER (self->perspectives_stack),
-                               GTK_WIDGET (perspective),
-                               "position", &position,
-                               NULL);
-
-      g_list_store_append (self->perspectives, perspective);
-      g_list_store_sort (self->perspectives,
-                         ide_workbench_compare_perspective,
-                         NULL);
-    }
-
   accel = ide_perspective_get_accelerator (perspective);
 
   if (accel != NULL)
@@ -712,28 +752,10 @@ void
 ide_workbench_remove_perspective (IdeWorkbench   *self,
                                   IdePerspective *perspective)
 {
-  guint n_items;
-  guint i;
-
   g_assert (IDE_IS_WORKBENCH (self));
   g_assert (IDE_IS_PERSPECTIVE (perspective));
   g_assert (gtk_widget_get_parent (GTK_WIDGET (perspective)) ==
             GTK_WIDGET (self->perspectives_stack));
-
-  n_items = g_list_model_get_n_items (G_LIST_MODEL (self->perspectives));
-
-  for (i = 0; i < n_items; i++)
-    {
-      g_autoptr(IdePerspective) item = NULL;
-
-      item = g_list_model_get_item (G_LIST_MODEL (self->perspectives), i);
-
-      if (item == perspective)
-        {
-          g_list_store_remove (self->perspectives, i);
-          break;
-        }
-    }
 
   gtk_container_remove (GTK_CONTAINER (self->perspectives_stack),
                         GTK_WIDGET (perspective));
@@ -861,9 +883,6 @@ ide_workbench_set_visible_perspective (IdeWorkbench   *self,
     gtk_stack_set_visible_child (self->header_stack, titlebar);
   else
     gtk_stack_set_visible_child (self->header_stack, GTK_WIDGET (self->header_bar));
-
-  actions = ide_perspective_get_actions (perspective);
-  gtk_widget_insert_action_group (GTK_WIDGET (self), "perspective", actions);
 
   /*
    * If we are transitioning to the editor the first time, we can

@@ -20,6 +20,8 @@
 
 #include <dazzle.h>
 
+#include "ide-macros.h"
+
 #include "application/ide-application.h"
 #include "search/ide-search-entry.h"
 #include "util/ide-gtk.h"
@@ -34,6 +36,7 @@ typedef struct
   DzlPriorityBox  *left_box;
   IdeOmniBar      *omni_bar;
   IdeSearchEntry  *search_entry;
+  GtkBox          *primary;
 } IdeWorkbenchHeaderBarPrivate;
 
 static void buildable_iface_init (GtkBuildableIface *iface);
@@ -49,6 +52,35 @@ ide_workbench_header_bar_new (void)
 }
 
 static void
+search_popover_position_func (DzlSuggestionEntry *entry,
+                              GdkRectangle       *area,
+                              gboolean           *is_absolute,
+                              gpointer            user_data)
+{
+  gint new_width;
+
+  g_assert (DZL_IS_SUGGESTION_ENTRY (entry));
+  g_assert (area != NULL);
+  g_assert (is_absolute != NULL);
+  g_assert (user_data == NULL);
+
+#define RIGHT_MARGIN 6
+
+  /* We want the search area to be the right 2/5ths of the window, with a bit
+   * of margin on the popover.
+   */
+
+  dzl_suggestion_entry_window_position_func (entry, area, is_absolute, NULL);
+
+  new_width = (area->width * 2 / 5);
+  area->x += area->width - new_width;
+  area->width = new_width - RIGHT_MARGIN;
+  area->y -= 3;
+
+#undef RIGHT_MARGIN
+}
+
+static void
 ide_workbench_header_bar_class_init (IdeWorkbenchHeaderBarClass *klass)
 {
   GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
@@ -57,6 +89,7 @@ ide_workbench_header_bar_class_init (IdeWorkbenchHeaderBarClass *klass)
   gtk_widget_class_bind_template_child_private (widget_class, IdeWorkbenchHeaderBar, left_box);
   gtk_widget_class_bind_template_child_private (widget_class, IdeWorkbenchHeaderBar, menu_button);
   gtk_widget_class_bind_template_child_private (widget_class, IdeWorkbenchHeaderBar, omni_bar);
+  gtk_widget_class_bind_template_child_private (widget_class, IdeWorkbenchHeaderBar, primary);
   gtk_widget_class_bind_template_child_private (widget_class, IdeWorkbenchHeaderBar, right_box);
   gtk_widget_class_bind_template_child_private (widget_class, IdeWorkbenchHeaderBar, search_entry);
 
@@ -76,6 +109,10 @@ ide_workbench_header_bar_init (IdeWorkbenchHeaderBar *self)
   popover = gtk_popover_new_from_model (NULL, G_MENU_MODEL (model));
   gtk_widget_set_size_request (popover, 225, -1);
   gtk_menu_button_set_popover (priv->menu_button, popover);
+  gtk_container_set_border_width (GTK_CONTAINER (popover), 10);
+
+  dzl_suggestion_entry_set_position_func (DZL_SUGGESTION_ENTRY (priv->search_entry),
+                                          search_popover_position_func, NULL, NULL);
 }
 
 void
@@ -104,6 +141,28 @@ ide_workbench_header_bar_insert_left (IdeWorkbenchHeaderBar *self,
                                      "pack-type", pack_type,
                                      "priority", priority,
                                      NULL);
+}
+
+/**
+ * ide_workbench_header_bar_add_primary:
+ * @self: a #IdeWorkbenchHeaderBar
+ *
+ * This will add @widget to the special box at the top left of the window next
+ * to the perspective selector. This is a special location in that the spacing
+ * is treated differently than other locations on the header bar.
+ *
+ * Since: 3.26
+ */
+void
+ide_workbench_header_bar_add_primary (IdeWorkbenchHeaderBar *self,
+                                      GtkWidget             *widget)
+{
+  IdeWorkbenchHeaderBarPrivate *priv = ide_workbench_header_bar_get_instance_private (self);
+
+  g_return_if_fail (IDE_IS_WORKBENCH_HEADER_BAR (self));
+  g_return_if_fail (GTK_IS_WIDGET (widget));
+
+  gtk_container_add (GTK_CONTAINER (priv->primary), widget);
 }
 
 void
@@ -145,9 +204,33 @@ ide_workbench_header_bar_get_internal_child (GtkBuildable *buildable,
 }
 
 static void
+ide_workbench_header_bar_add_child (GtkBuildable *buildable,
+                                    GtkBuilder   *builder,
+                                    GObject      *object,
+                                    const gchar  *type)
+{
+  IdeWorkbenchHeaderBar *self = (IdeWorkbenchHeaderBar *)buildable;
+  GtkBuildableIface *parent;
+
+  g_return_if_fail (IDE_IS_WORKBENCH_HEADER_BAR (self));
+  g_return_if_fail (GTK_IS_BUILDER (builder));
+  g_return_if_fail (GTK_IS_WIDGET (object));
+
+  if (ide_str_equal0 (type, "primary"))
+    {
+      ide_workbench_header_bar_add_primary (self, GTK_WIDGET (object));
+      return;
+    }
+
+  parent = g_type_interface_peek_parent (GTK_BUILDABLE_GET_IFACE (self));
+  parent->add_child (buildable, builder, object, type);
+}
+
+static void
 buildable_iface_init (GtkBuildableIface *iface)
 {
   iface->get_internal_child = ide_workbench_header_bar_get_internal_child;
+  iface->add_child = ide_workbench_header_bar_add_child;
 }
 
 /**

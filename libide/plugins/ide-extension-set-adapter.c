@@ -550,3 +550,22 @@ ide_extension_set_adapter_new (IdeContext  *context,
                        "value", value,
                        NULL);
 }
+
+/**
+ * ide_extension_set_adapter_get_extension:
+ * @self: a #IdeExtensionSetAdapter
+ * @plugin_info: a #PeasPluginInfo
+ *
+ * Locates the extension owned by @plugin_info if such extension exists.
+ *
+ * Returns: (transfer none) (nullable): A #PeasExtension or %NULL
+ */
+PeasExtension *
+ide_extension_set_adapter_get_extension (IdeExtensionSetAdapter *self,
+                                         PeasPluginInfo         *plugin_info)
+{
+  g_return_val_if_fail (IDE_IS_EXTENSION_SET_ADAPTER (self), NULL);
+  g_return_val_if_fail (plugin_info != NULL, NULL);
+
+  return g_hash_table_lookup (self->extensions, plugin_info);
+}

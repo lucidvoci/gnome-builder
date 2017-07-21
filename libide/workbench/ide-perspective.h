@@ -32,11 +32,9 @@ struct _IdePerspectiveInterface
   GTypeInterface parent;
 
   gboolean      (*agree_to_shutdown)   (IdePerspective *self);
-  GActionGroup *(*get_actions)         (IdePerspective *self);
   gchar        *(*get_icon_name)       (IdePerspective *self);
   gchar        *(*get_id)              (IdePerspective *self);
   gboolean      (*get_needs_attention) (IdePerspective *self);
-  gint          (*get_priority)        (IdePerspective *self);
   gchar        *(*get_title)           (IdePerspective *self);
   GtkWidget    *(*get_titlebar)        (IdePerspective *self);
   gboolean      (*is_early)            (IdePerspective *self);
@@ -46,14 +44,13 @@ struct _IdePerspectiveInterface
                                         GtkCallback     callback,
                                         gpointer        user_data);
   gchar        *(*get_accelerator)     (IdePerspective *self);
+  void          (*restore_state)       (IdePerspective *self);
 };
 
 gboolean      ide_perspective_agree_to_shutdown   (IdePerspective *self);
-GActionGroup *ide_perspective_get_actions         (IdePerspective *self);
 gchar        *ide_perspective_get_icon_name       (IdePerspective *self);
 gchar        *ide_perspective_get_id              (IdePerspective *self);
 gboolean      ide_perspective_get_needs_attention (IdePerspective *self);
-gint          ide_perspective_get_priority        (IdePerspective *self);
 gchar        *ide_perspective_get_title           (IdePerspective *self);
 GtkWidget    *ide_perspective_get_titlebar        (IdePerspective *self);
 gboolean      ide_perspective_is_early            (IdePerspective *self);
@@ -63,6 +60,7 @@ void          ide_perspective_views_foreach       (IdePerspective *self,
                                                    GtkCallback     callback,
                                                    gpointer        user_data);
 gchar        *ide_perspective_get_accelerator     (IdePerspective *self);
+void          ide_perspective_restore_state       (IdePerspective *self);
 
 G_END_DECLS
 

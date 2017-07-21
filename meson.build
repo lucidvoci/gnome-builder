@@ -1,12 +1,13 @@
 project('gnome-builder', 'c',
-  license: 'GPL3+',
-  version: '3.25.2',
-  meson_version: '>= 0.37.0',
+          license: 'GPL3+',
+          version: '3.25.5',
+    meson_version: '>= 0.40.1',
   default_options: [
-    'c_std=gnu11',
-    'cpp_std=c++11',
-    'warning_level=2',
-  ],
+                     'c_std=gnu11',
+                     'cpp_std=c++11',
+                     'warning_level=2',
+                     'with_channel=other',
+                   ],
 )
 
 version_split = meson.project_version().split('.')
@@ -14,12 +15,44 @@ MAJOR_VERSION = version_split[0]
 MINOR_VERSION = version_split[1]
 MICRO_VERSION = version_split[2]
 
+pkgdocdir_abs = join_paths(get_option('prefix'), get_option('datadir'), 'doc', 'gnome-builder')
 pkglibdir_abs = join_paths(get_option('prefix'), get_option('libdir'), 'gnome-builder')
 pkglibdir = join_paths(get_option('libdir'), 'gnome-builder')
 pkgincludedir = join_paths(get_option('includedir'), 'gnome-builder')
 pkggirdir = join_paths(get_option('datadir'),'gnome-builder', 'gir-1.0')
 pkgtypelibdir = join_paths(get_option('libdir'), 'gnome-builder', 'girepository-1.0')
 pkgvapidir = join_paths(get_option('datadir'), 'gnome-builder/vapi')
+
+
+status = [
+  '', '',
+  'gnome-builder @0@ (@1@)'.format(meson.project_version(), get_option('with_channel')),
+  '', '',
+]
+
+# Message of doom
+if (version_split[1].to_int() % 2 == 1)
+  status += [
+    'You are building a debug version of GNOME builder. There may be more',
+    'bugs in this version that you are comfortable with. Addtionally, there',
+    'is a chance it will eat all of your work and leave you sad and alone.',
+    '', ''
+  ]
+endif
+
+status += [
+  'Version ............... : @0@'.format(meson.project_version()),
+  'Channel ............... : @0@'.format(get_option('with_channel')),
+  'Build Type ............ : @0@'.format(get_option('buildtype')),
+  '',
+  'Prefix ................ : @0@'.format(get_option('prefix')),
+  'Libdir ................ : @0@'.format(join_paths(get_option('prefix'), get_option('libdir'))),
+  '',
+  'Tracing ............... : @0@'.format(get_option('enable_tracing')),
+  'Profiling ............. : @0@'.format(get_option('enable_profiling')),
+  'RDTSCP ................ : @0@'.format(get_option('enable_rdtscp')),
+  '', ''
+]
 
 conf = configuration_data()
 conf.set_quoted('PACKAGE_NAME', 'gnome-builder')
@@ -44,6 +77,7 @@ add_global_arguments([
   '-DHAVE_CONFIG_H',
   '-I' + meson.build_root(), # config.h
   '-D_GNU_SOURCE',
+  '-DIDE_COMPILATION',
 ], language: 'c')
 
 cc = meson.get_compiler('c')
@@ -121,20 +155,20 @@ if cc.has_function('sched_getcpu')
 endif
 
 configure_file(
-  output: 'config.h',
+         output: 'config.h',
   configuration: conf
 )
 
 # Commonly used deps
-libgio_dep = dependency('gio-2.0', version: '>= 2.50.0')
+libgio_dep = dependency('gio-2.0', version: '>= 2.53.2')
 libgiounix_dep = dependency('gio-unix-2.0')
 libgtk_dep = dependency('gtk+-3.0', version: '>= 3.22.1')
 libpeas_dep = dependency('libpeas-1.0', version: '>= 1.21.0')
 libm_dep = cc.find_library('m', required: false)
 libjson_glib_dep = dependency('json-glib-1.0', version: '>= 1.2.0')
-libdazzle_dep = dependency('libdazzle-1.0', version: '>= 0.1.0', required: false)
-libtemplate_glib_dep = dependency('template-glib-1.0', version: '>= 3.25.2', required: false)
-libjsonrpc_glib_dep = dependency('jsonrpc-glib-1.0', version: '>= 3.25.2',
+libdazzle_dep = dependency('libdazzle-1.0', version: '>= 3.25.5', required: false)
+libtemplate_glib_dep = dependency('template-glib-1.0', version: '>= 3.25.3', required: false)
+libjsonrpc_glib_dep = dependency('jsonrpc-glib-1.0', version: '>= 3.25.3',
   fallback: ['jsonrpc-glib', 'libjsonrpc_glib_dep'],
   default_options: [
     'with_introspection=false',
@@ -220,6 +254,7 @@ if get_option('with_flatpak') or get_option('with_git')
 endif
 
 gnome = import('gnome')
+i18n = import('i18n')
 
 subdir('data')
 subdir('data/fonts')
@@ -227,47 +262,49 @@ subdir('data/gsettings')
 subdir('data/icons')
 subdir('data/style-schemes')
 subdir('contrib/libeditorconfig')
-subdir('contrib/nautilus')
 subdir('contrib/xml')
 subdir('contrib/gstyle') # Depends on libxml
 subdir('libide')
 subdir('plugins')
 subdir('po')
 subdir('tests')
+subdir('doc')
 
-exe_link_args = [
-  '-pie',
-]
-exe_c_args = [
-  '-fPIE',
+exe_link_args = [ '-pie' ]
+exe_c_args = [ '-fPIE' ]
+
+gnome_builder_sources = [
+  'src/main.c',
+  'src/bug-buddy.c',
+  'src/bug-buddy.h',
 ]
 
-executable('gnome-builder', 'src/main.c',
-  gui_app: true,
-  install: true,
-  c_args: exe_c_args,
-  link_args: exe_link_args,
+executable('gnome-builder', gnome_builder_sources,
+        gui_app: true,
+        install: true,
+         c_args: exe_c_args,
+      link_args: exe_link_args,
   install_rpath: pkglibdir_abs,
-  dependencies: libide_deps + [libide_dep],
+   dependencies: libide_deps + [libide_dep],
 )
 
-executable('gnome-builder-cli', 'src/main.c',
-  gui_app: false,
-  install: true,
-  c_args: exe_c_args,
-  link_args: exe_link_args,
+executable('gnome-builder-cli', gnome_builder_sources,
+        gui_app: false,
+        install: true,
+         c_args: exe_c_args,
+      link_args: exe_link_args,
   install_rpath: pkglibdir_abs,
-  dependencies: libide_deps + [libide_dep],
+   dependencies: libide_deps + [libide_dep],
 )
 
-executable('gnome-builder-worker', 'src/main.c',
-  gui_app: false,
-  install: true,
-  install_dir: get_option('libexecdir'),
-  c_args: exe_c_args,
-  link_args: exe_link_args,
+executable('gnome-builder-worker', gnome_builder_sources,
+        gui_app: false,
+        install: true,
+    install_dir: get_option('libexecdir'),
+         c_args: exe_c_args,
+      link_args: exe_link_args,
   install_rpath: pkglibdir_abs,
-  dependencies: libide_deps + [libide_dep],
+   dependencies: libide_deps + [libide_dep],
 )
 
 meson.add_install_script('build-aux/meson/meson_post_install.py')
@@ -280,3 +317,5 @@ run_target('builder-dist',
     meson.project_name(),
   ]
 )
+
+message('\n  '.join(status))

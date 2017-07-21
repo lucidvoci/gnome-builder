@@ -27,33 +27,19 @@
 struct _GbpDevhelpEditorViewAddin
 {
   GObject         parent_instance;
-  IdeEditorView  *editor_view;
 };
 
-static void iface_init (IdeEditorViewAddinInterface *iface);
-
-G_DEFINE_TYPE_EXTENDED (GbpDevhelpEditorViewAddin, gbp_devhelp_editor_view_addin, G_TYPE_OBJECT, 0,
-                        G_IMPLEMENT_INTERFACE (IDE_TYPE_EDITOR_VIEW_ADDIN, iface_init))
-
 static void
-request_documentation_cb (GbpDevhelpEditorViewAddin *self,
-                          const gchar               *word,
-                          IdeEditorView             *view)
+documentation_requested_cb (GbpDevhelpEditorViewAddin *self,
+                            const gchar               *word,
+                            IdeSourceView             *source_view)
 {
-  GtkWidget *layout;
-  GtkWidget *panel;
-  GtkWidget *pane;
-
-  g_assert (IDE_IS_EDITOR_VIEW (view));
   g_assert (GBP_IS_DEVHELP_EDITOR_VIEW_ADDIN (self));
+  g_assert (IDE_IS_SOURCE_VIEW (source_view));
 
-  layout = gtk_widget_get_ancestor (GTK_WIDGET (view), IDE_TYPE_LAYOUT);
-  if (layout == NULL)
-    return;
-
-  pane = dzl_dock_bin_get_right_edge (DZL_DOCK_BIN (layout));
-  panel = dzl_gtk_widget_find_child_typed (pane, GBP_TYPE_DEVHELP_PANEL);
-  gbp_devhelp_panel_focus_search (GBP_DEVHELP_PANEL (panel), word);
+  if (!ide_str_empty0 (word))
+    dzl_gtk_widget_action (GTK_WIDGET (source_view), "devhelp", "search",
+                           g_variant_new_string (word));
 }
 
 static void
@@ -65,16 +51,44 @@ gbp_devhelp_editor_view_addin_load (IdeEditorViewAddin *addin,
   g_assert (GBP_IS_DEVHELP_EDITOR_VIEW_ADDIN (addin));
   g_assert (IDE_IS_EDITOR_VIEW (view));
 
-  self = GBP_DEVHELP_EDITOR_VIEW_ADDIN (addin);
-  self->editor_view = view;
-
-  g_signal_connect_object (view,
-                           "request-documentation",
-                           G_CALLBACK (request_documentation_cb),
+  g_signal_connect_object (ide_editor_view_get_view (view),
+                           "documentation-requested",
+                           G_CALLBACK (documentation_requested_cb),
                            addin,
                            G_CONNECT_SWAPPED);
 
 }
+
+static void
+gbp_devhelp_editor_view_addin_unload (IdeEditorViewAddin *addin,
+                                      IdeEditorView      *view)
+{
+  IdeSourceView *source_view;
+
+  g_assert (GBP_IS_DEVHELP_EDITOR_VIEW_ADDIN (addin));
+  g_assert (IDE_IS_EDITOR_VIEW (view));
+
+  source_view = ide_editor_view_get_view (view);
+
+  if (source_view != NULL)
+    g_signal_handlers_disconnect_by_func (source_view,
+                                          G_CALLBACK (documentation_requested_cb),
+                                          addin);
+}
+
+static void
+editor_view_addin_iface_init (IdeEditorViewAddinInterface *iface)
+{
+  iface->load = gbp_devhelp_editor_view_addin_load;
+  iface->unload = gbp_devhelp_editor_view_addin_unload;
+}
+
+G_DEFINE_TYPE_WITH_CODE (GbpDevhelpEditorViewAddin,
+                         gbp_devhelp_editor_view_addin,
+                         G_TYPE_OBJECT,
+                         G_IMPLEMENT_INTERFACE (IDE_TYPE_EDITOR_VIEW_ADDIN,
+                                                editor_view_addin_iface_init))
+
 
 static void
 gbp_devhelp_editor_view_addin_class_init (GbpDevhelpEditorViewAddinClass *klass)
@@ -84,10 +98,4 @@ gbp_devhelp_editor_view_addin_class_init (GbpDevhelpEditorViewAddinClass *klass)
 static void
 gbp_devhelp_editor_view_addin_init (GbpDevhelpEditorViewAddin *self)
 {
-}
-
-static void
-iface_init (IdeEditorViewAddinInterface *iface)
-{
-  iface->load = gbp_devhelp_editor_view_addin_load;
 }

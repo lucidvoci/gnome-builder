@@ -10,7 +10,7 @@ ide_test_env = [
 #  'MALLOC_PERTURB_=$((${RANDOM:-256} % 256))',
 ]
 ide_test_cflags = [
-	'-DTEST_DATA_DIR="@0@/data"'.format(meson.current_source_dir()),
+  '-DTEST_DATA_DIR="@0@/data/"'.format(meson.current_source_dir()),
 ]
 
 ide_context = executable('test-ide-context',
@@ -81,9 +81,9 @@ ide_indenter = executable('test-ide-indenter',
     libpeas_dep,
   ],
 )
-test('test-ide-indenter', ide_indenter,
-  env: ide_test_env,
-)
+#test('test-ide-indenter', ide_indenter,
+  #env: ide_test_env,
+#)
 
 
 ide_vcs_uri = executable('test-ide-vcs-uri',
@@ -111,9 +111,9 @@ test_vim = executable('test-vim',
   c_args: ide_test_cflags,
   dependencies: libide_dep,
 )
-test('test-vim', test_vim,
-  env: ide_test_env,
-)
+#test('test-vim', test_vim,
+#  env: ide_test_env,
+#)
 
 
 test_snippet_parser = executable('test-snippet-parser',

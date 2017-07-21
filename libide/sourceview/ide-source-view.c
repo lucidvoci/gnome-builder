@@ -21,7 +21,6 @@
 #include <dazzle.h>
 #include <glib/gi18n.h>
 #include <stdlib.h>
-#include <gspell/gspell.h>
 
 #include "ide-context.h"
 #include "ide-debug.h"
@@ -52,9 +51,11 @@
 #include "sourceview/ide-indenter.h"
 #include "sourceview/ide-line-change-gutter-renderer.h"
 #include "sourceview/ide-line-diagnostics-gutter-renderer.h"
+#include "sourceview/ide-source-iter.h"
 #include "sourceview/ide-source-view-capture.h"
 #include "sourceview/ide-source-view-mode.h"
 #include "sourceview/ide-source-view-movements.h"
+#include "sourceview/ide-source-view-private.h"
 #include "sourceview/ide-source-view.h"
 #include "sourceview/ide-text-util.h"
 #include "sourceview/ide-cursor.h"
@@ -143,10 +144,6 @@ typedef struct
   GdkRGBA                      bubble_color2;
   GdkRGBA                      search_shadow_rgba;
   GdkRGBA                      snippet_area_background_rgba;
-  GdkRGBA                      spellchecker_bubble_bg_color1;
-  GdkRGBA                      spellchecker_bubble_bg_color2;
-  GdkRGBA                      spellchecker_bubble_fg;
-  GtkTextTag                  *spellchecker_bubble_tag;
 
   guint                        font_scale;
 
@@ -158,9 +155,6 @@ typedef struct
   IdeSourceLocation           *definition_src_location;
   GtkTextMark                 *definition_highlight_start_mark;
   GtkTextMark                 *definition_highlight_end_mark;
-
-  GtkTextMark                 *misspelled_word_begin_mark;
-  GtkTextMark                 *misspelled_word_end_mark;
 
   GRegex                      *include_regex;
 
@@ -186,7 +180,6 @@ typedef struct
   guint                        show_search_shadow : 1;
   guint                        snippet_completion : 1;
   guint                        waiting_for_capture : 1;
-  guint                        spell_checking : 1;
 } IdeSourceViewPrivate;
 
 typedef struct
@@ -233,7 +226,6 @@ enum {
   PROP_SHOW_SEARCH_BUBBLES,
   PROP_SHOW_SEARCH_SHADOW,
   PROP_SNIPPET_COMPLETION,
-  PROP_SPELL_CHECKING,
   PROP_OVERSCROLL,
   LAST_PROP,
 
@@ -258,6 +250,7 @@ enum {
   CLEAR_SELECTION,
   CLEAR_SNIPPETS,
   CYCLE_COMPLETION,
+  DOCUMENTATION_REQUESTED,
   DECREASE_FONT_SIZE,
   DELETE_SELECTION,
   DUPLICATE_ENTIRE_LINE,
@@ -286,6 +279,7 @@ enum {
   REMOVE_CURSORS,
   REPLAY_MACRO,
   REQUEST_DOCUMENTATION,
+  RESET,
   RESET_FONT_SIZE,
   RESTORE_INSERT_MARK,
   SAVE_COMMAND,
@@ -704,7 +698,7 @@ animate_shrink (IdeSourceView     *self,
                              NULL);
 }
 
-static void
+void
 ide_source_view_scroll_to_insert (IdeSourceView *self)
 {
   GtkTextBuffer *buffer;
@@ -715,6 +709,7 @@ ide_source_view_scroll_to_insert (IdeSourceView *self)
   g_assert (IDE_IS_SOURCE_VIEW (self));
 
   buffer = gtk_text_view_get_buffer (GTK_TEXT_VIEW (self));
+  _ide_buffer_cancel_cursor_restore (IDE_BUFFER (buffer));
   mark = gtk_text_buffer_get_insert (buffer);
   ide_source_view_scroll_mark_onscreen (self, mark, TRUE, 0.5, 0.5);
 
@@ -998,12 +993,8 @@ ide_source_view__buffer_notify_style_scheme_cb (IdeSourceView *self,
   GtkSourceStyle *search_match_style = NULL;
   GtkSourceStyle *search_shadow_style = NULL;
   GtkSourceStyle *snippet_area_style = NULL;
-  GtkSourceStyle *spellchecker_match_style = NULL;
   g_autofree gchar *snippet_background = NULL;
   g_autofree gchar *search_shadow_background = NULL;
-  GdkRGBA spellchecker_bubble_fg;
-  GdkRGBA spellchecker_bubble_bg;
-  gboolean colors_valid = FALSE;
 
   g_assert (IDE_IS_SOURCE_VIEW (self));
   g_assert (IDE_IS_BUFFER (buffer));
@@ -1014,7 +1005,6 @@ ide_source_view__buffer_notify_style_scheme_cb (IdeSourceView *self,
       search_match_style = gtk_source_style_scheme_get_style (scheme, "search-match");
       search_shadow_style = gtk_source_style_scheme_get_style (scheme, "search-shadow");
       snippet_area_style = gtk_source_style_scheme_get_style (scheme, "snippet::area");
-      spellchecker_match_style = gtk_source_style_scheme_get_style (scheme, "misspelled-match");
     }
 
   if (search_match_style)
@@ -1054,35 +1044,6 @@ ide_source_view__buffer_notify_style_scheme_cb (IdeSourceView *self,
       gdk_rgba_parse (&priv->snippet_area_background_rgba, "#204a87");
       priv->snippet_area_background_rgba.alpha = 0.1;
     }
-
-  if (spellchecker_match_style)
-    {
-      g_autofree gchar *background = NULL;
-      g_autofree gchar *foreground = NULL;
-
-      g_object_get (spellchecker_match_style, "background", &background, NULL);
-      g_object_get (spellchecker_match_style, "foreground", &foreground, NULL);
-
-      if (!ide_str_empty0 (background) &&
-          gdk_rgba_parse (&spellchecker_bubble_bg, background) &&
-          !ide_str_empty0 (foreground) &&
-          gdk_rgba_parse (&spellchecker_bubble_fg, foreground))
-        colors_valid = TRUE;
-    }
-
-  if (!colors_valid)
-    {
-      gdk_rgba_parse (&spellchecker_bubble_bg, "#ADD8E6");
-      gdk_rgba_parse (&spellchecker_bubble_fg, "#00000FF");
-    }
-
-  priv->spellchecker_bubble_bg_color1 = spellchecker_bubble_bg;
-  dzl_rgba_shade (&spellchecker_bubble_bg, &priv->spellchecker_bubble_bg_color2, 0.8);
-
-  priv->spellchecker_bubble_tag = gtk_text_buffer_create_tag (GTK_TEXT_BUFFER (priv->buffer), NULL,
-                                                              "foreground-rgba", &spellchecker_bubble_fg,
-                                                              "background-rgba", &priv->spellchecker_bubble_bg_color1,
-                                                              NULL);
 }
 
 static void
@@ -1240,12 +1201,13 @@ ide_source_view__buffer_insert_text_cb (IdeSourceView *self,
   IdeSourceViewPrivate *priv = ide_source_view_get_instance_private (self);
   IdeSourceSnippet *snippet;
 
-  IDE_ENTRY;
-
   g_assert (IDE_IS_SOURCE_VIEW (self));
   g_assert (iter != NULL);
   g_assert (text != NULL);
-  g_assert (GTK_IS_TEXT_BUFFER (buffer));
+  g_assert (IDE_IS_BUFFER (buffer));
+
+  if (_ide_buffer_get_loading (IDE_BUFFER (buffer)))
+    return;
 
   gtk_text_buffer_begin_user_action (buffer);
 
@@ -1255,8 +1217,6 @@ ide_source_view__buffer_insert_text_cb (IdeSourceView *self,
       ide_source_snippet_before_insert_text (snippet, buffer, iter, text, len);
       ide_source_view_unblock_handlers (self);
     }
-
-  IDE_EXIT;
 }
 
 static void
@@ -1270,12 +1230,13 @@ ide_source_view__buffer_insert_text_after_cb (IdeSourceView *self,
   IdeSourceSnippet *snippet;
   GtkTextIter insert;
 
-  IDE_ENTRY;
-
   g_assert (IDE_IS_SOURCE_VIEW (self));
   g_assert (iter != NULL);
   g_assert (text != NULL);
-  g_assert (GTK_IS_TEXT_BUFFER (buffer));
+  g_assert (IDE_IS_BUFFER (buffer));
+
+  if (_ide_buffer_get_loading (IDE_BUFFER (buffer)))
+    return;
 
   if (NULL != (snippet = g_queue_peek_head (priv->snippets)))
     {
@@ -1313,7 +1274,7 @@ ide_source_view__buffer_insert_text_after_cb (IdeSourceView *self,
 
   gtk_text_buffer_end_user_action (buffer);
 
-  IDE_EXIT;
+  return;
 }
 
 static void
@@ -2107,6 +2068,7 @@ ide_source_view_do_indent (IdeSourceView *self,
   IDE_ENTRY;
 
   g_assert (IDE_IS_SOURCE_VIEW (self));
+  g_assert (priv->auto_indent == TRUE);
   g_assert (event);
   g_assert (!indenter || IDE_IS_INDENTER (indenter));
 
@@ -2126,15 +2088,13 @@ ide_source_view_do_indent (IdeSourceView *self,
   gtk_text_buffer_get_iter_at_mark (GTK_TEXT_BUFFER (priv->buffer), &begin, insert);
   gtk_text_buffer_get_iter_at_mark (GTK_TEXT_BUFFER (priv->buffer), &end, insert);
 
-  if (indenter == NULL)
-    IDE_EXIT;
-
   /*
-   * Let the formatter potentially set the replacement text.
+   * Let the formatter potentially set the replacement text. If we don't have a
+   * formatter, use our simple formatter which tries to mimic GtkSourceView.
    */
   indent = ide_indenter_format (indenter, text_view, &begin, &end, &cursor_offset, event);
 
-  if (indent)
+  if (indent != NULL)
     {
       /*
        * Insert the indention text.
@@ -2393,7 +2353,6 @@ ide_source_view_key_press_event (GtkWidget   *widget,
   GtkTextBuffer *buffer;
   GtkTextMark *insert;
   IdeSourceSnippet *snippet;
-  IdeIndenter *indenter;
   gboolean ret = FALSE;
   guint change_sequence;
 
@@ -2535,14 +2494,22 @@ ide_source_view_key_press_event (GtkWidget   *widget,
    * chain up to the parent class to insert the character, and then let the
    * auto-indenter fix things up.
    */
-  if ((priv->buffer != NULL) &&
-      (priv->auto_indent != FALSE) &&
-      (indenter = ide_source_view_get_indenter (self)) &&
-      ide_indenter_is_trigger (indenter, event))
+  if (priv->buffer != NULL && priv->auto_indent)
     {
-      ide_source_view_do_indent (self, event, indenter);
-      ret = TRUE;
-      goto cleanup;
+      IdeIndenter *indenter = ide_source_view_get_indenter (self);
+
+      /*
+       * Indenter may be NULL and that is okay, the IdeIdenter API
+       * knows how to deal with that situation by emulating GtkSourceView
+       * indentation style.
+       */
+
+      if (ide_indenter_is_trigger (indenter, event))
+        {
+          ide_source_view_do_indent (self, event, indenter);
+          ret = TRUE;
+          goto cleanup;
+        }
     }
 
   /*
@@ -4450,8 +4417,8 @@ ide_source_view_real_reindent (IdeSourceView *self)
   if (priv->buffer == NULL)
     return;
 
-  if (NULL == (indenter = ide_source_view_get_indenter (self)))
-    return;
+  /* indenter may be NULL and that is okay */
+  indenter = ide_source_view_get_indenter (self);
 
   buffer = GTK_TEXT_BUFFER (priv->buffer);
   window = gtk_text_view_get_window (GTK_TEXT_VIEW (self), GTK_TEXT_WINDOW_TEXT);
@@ -4563,6 +4530,8 @@ ide_source_view_constructed (GObject *object)
   gboolean visible;
 
   G_OBJECT_CLASS (ide_source_view_parent_class)->constructed (object);
+
+  _ide_source_view_init_shortcuts (self);
 
   ide_source_view_real_set_mode (self, NULL, IDE_SOURCE_VIEW_MODE_TYPE_PERMANENT);
 
@@ -4913,59 +4882,6 @@ ide_source_view_draw_search_bubbles (IdeSourceView *self,
   cairo_region_destroy (match_region);
 }
 
-void
-ide_source_view_draw_spellchecking_bubble (IdeSourceView *self,
-                                           cairo_t       *cr)
-{
-  IdeSourceViewPrivate *priv = ide_source_view_get_instance_private (self);
-  GtkTextView *text_view = (GtkTextView *)self;
-  cairo_region_t *clip_region;
-  cairo_rectangle_int_t rect;
-  GdkRectangle area;
-  GdkRectangle begin_rect;
-  GdkRectangle end_rect;
-  GtkTextIter begin;
-  GtkTextIter end;
-
-  g_return_if_fail (IDE_IS_SOURCE_VIEW (self));
-  g_return_if_fail (GTK_IS_TEXT_VIEW (text_view));
-  g_return_if_fail (cr);
-
-  gtk_text_buffer_get_iter_at_mark (GTK_TEXT_BUFFER (priv->buffer), &begin, priv->misspelled_word_begin_mark);
-  gtk_text_buffer_get_iter_at_mark (GTK_TEXT_BUFFER (priv->buffer), &end, priv->misspelled_word_end_mark);
-
-  if (gtk_text_iter_get_line (&begin) == gtk_text_iter_get_line (&end))
-    {
-      if (!gdk_cairo_get_clip_rectangle (cr, &area))
-        gtk_widget_get_allocation (GTK_WIDGET (self), &area);
-
-      clip_region = cairo_region_create_rectangle (&area);
-
-      gtk_text_view_get_iter_location (text_view, &begin, &begin_rect);
-      gtk_text_view_buffer_to_window_coords (text_view, GTK_TEXT_WINDOW_TEXT,
-                                             begin_rect.x, begin_rect.y,
-                                             &begin_rect.x, &begin_rect.y);
-      gtk_text_view_get_iter_location (text_view, &end, &end_rect);
-      gtk_text_view_buffer_to_window_coords (text_view, GTK_TEXT_WINDOW_TEXT,
-                                             end_rect.x, end_rect.y,
-                                             &end_rect.x, &end_rect.y);
-
-      rect.x = begin_rect.x;
-      rect.y = begin_rect.y;
-      rect.width = end_rect.x - begin_rect.x;
-      rect.height = MAX (begin_rect.height, end_rect.height);
-
-      cairo_region_subtract_rectangle (clip_region, &rect);
-      gdk_cairo_region (cr, clip_region);
-      cairo_clip (cr);
-
-      draw_bezel (cr, &rect, 3, &priv->spellchecker_bubble_bg_color2);
-      draw_bezel (cr, &rect, 2, &priv->spellchecker_bubble_bg_color1);
-
-      cairo_region_destroy (clip_region);
-    }
-}
-
 static void
 ide_source_view_real_draw_layer (GtkTextView      *text_view,
                                  GtkTextViewLayer  layer,
@@ -4992,13 +4908,6 @@ ide_source_view_real_draw_layer (GtkTextView      *text_view,
         {
           cairo_save (cr);
           ide_source_view_draw_search_bubbles (self, cr);
-          cairo_restore (cr);
-        }
-
-      if (priv->misspelled_word_begin_mark != NULL && priv->misspelled_word_end_mark != NULL)
-        {
-          cairo_save (cr);
-          ide_source_view_draw_spellchecking_bubble (self, cr);
           cairo_restore (cr);
         }
     }
@@ -5977,41 +5886,6 @@ ide_source_view_real_begin_rename (IdeSourceView *self)
   IDE_EXIT;
 }
 
-void
-ide_source_view_set_spell_checking (IdeSourceView *self,
-                                    gboolean       enable)
-{
-  IdeSourceViewPrivate *priv = ide_source_view_get_instance_private (self);
-  GspellTextView *spell_text_view;
-
-  g_return_if_fail (IDE_IS_SOURCE_VIEW (self));
-
-  if (priv->spell_checking != enable)
-    {
-      if (IDE_IS_BUFFER (priv->buffer))
-        {
-          spell_text_view = gspell_text_view_get_from_gtk_text_view (GTK_TEXT_VIEW (self));
-          gspell_text_view_set_inline_spell_checking (spell_text_view, enable);
-          gspell_text_view_set_enable_language_menu (spell_text_view, enable);
-
-          ide_buffer_set_spell_checking (priv->buffer, enable);
-
-          priv->spell_checking = enable;
-          g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_SPELL_CHECKING]);
-        }
-    }
-}
-
-gboolean
-ide_source_view_get_spell_checking (IdeSourceView *self)
-{
-  IdeSourceViewPrivate *priv = ide_source_view_get_instance_private (self);
-
-  g_return_val_if_fail (IDE_IS_SOURCE_VIEW (self), FALSE);
-
-  return priv->spell_checking;
-}
-
 static void
 ide_source_view_format_selection_cb (GObject      *object,
                                      GAsyncResult *result,
@@ -6269,6 +6143,51 @@ ide_source_view_real_find_references (IdeSourceView *self)
 }
 
 static void
+ide_source_view_real_request_documentation (IdeSourceView *self)
+{
+  g_autofree gchar *word = NULL;
+  GtkTextBuffer *buffer;
+  GtkTextIter begin;
+  GtkTextIter end;
+
+  g_assert (IDE_IS_SOURCE_VIEW (self));
+
+  buffer = gtk_text_view_get_buffer (GTK_TEXT_VIEW (self));
+
+  if (!gtk_text_buffer_get_selection_bounds (buffer, &begin, &end))
+    {
+      gtk_text_iter_order (&begin, &end);
+
+      if (!_ide_source_iter_starts_extra_natural_word (&begin))
+        {
+          _ide_source_iter_backward_extra_natural_word_start (&begin);
+          end = begin;
+        }
+
+      _ide_source_iter_forward_extra_natural_word_end (&end);
+    }
+
+  word = gtk_text_iter_get_slice (&begin, &end);
+
+  g_signal_emit (self, signals [DOCUMENTATION_REQUESTED], 0, word);
+}
+
+static void
+ide_source_view_real_reset (IdeSourceView *self)
+{
+  g_assert (IDE_IS_SOURCE_VIEW (self));
+
+  g_signal_emit (self, signals [CLEAR_SEARCH], 0);
+  g_signal_emit (self, signals [CLEAR_MODIFIER], 0);
+  g_signal_emit (self, signals [CLEAR_SELECTION], 0);
+  g_signal_emit (self, signals [CLEAR_COUNT], 0);
+  g_signal_emit (self, signals [CLEAR_SNIPPETS], 0);
+  g_signal_emit (self, signals [HIDE_COMPLETION], 0);
+  g_signal_emit (self, signals [REMOVE_CURSORS], 0);
+  g_signal_emit (self, signals [SET_MODE], 0, NULL, IDE_SOURCE_VIEW_MODE_TYPE_PERMANENT);
+}
+
+static void
 ide_source_view_dispose (GObject *object)
 {
   IdeSourceView *self = (IdeSourceView *)object;
@@ -6431,10 +6350,6 @@ ide_source_view_get_property (GObject    *object,
       g_value_set_boolean (value, ide_source_view_get_snippet_completion (self));
       break;
 
-    case PROP_SPELL_CHECKING:
-      g_value_set_boolean (value, ide_source_view_get_spell_checking (self));
-      break;
-
     case PROP_OVERSCROLL:
       g_value_set_int (value, priv->overscroll_num_lines);
       break;
@@ -6536,10 +6451,6 @@ ide_source_view_set_property (GObject      *object,
       ide_source_view_set_snippet_completion (self, g_value_get_boolean (value));
       break;
 
-    case PROP_SPELL_CHECKING:
-      ide_source_view_set_spell_checking (self, g_value_get_boolean (value));
-      break;
-
     case PROP_OVERSCROLL:
       ide_source_view_set_overscroll_num_lines (self, g_value_get_int (value));
       break;
@@ -6611,6 +6522,7 @@ ide_source_view_class_init (IdeSourceViewClass *klass)
   klass->push_selection = ide_source_view_real_push_selection;
   klass->rebuild_highlight = ide_source_view_real_rebuild_highlight;
   klass->replay_macro = ide_source_view_real_replay_macro;
+  klass->request_documentation = ide_source_view_real_request_documentation;
   klass->reset_font_size = ide_source_view_real_reset_font_size;
   klass->restore_insert_mark = ide_source_view_real_restore_insert_mark;
   klass->save_command = ide_source_view_real_save_command;
@@ -6794,13 +6706,6 @@ ide_source_view_class_init (IdeSourceViewClass *klass)
                           FALSE,
                           (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
-  properties [PROP_SPELL_CHECKING] =
-    g_param_spec_boolean ("spell-checking",
-                          "spell-checking",
-                          "If spell checking is activated",
-                          FALSE,
-                          (G_PARAM_READWRITE | G_PARAM_EXPLICIT_NOTIFY | G_PARAM_STATIC_STRINGS));
-
   properties [PROP_OVERSCROLL] =
     g_param_spec_int ("overscroll",
                       "Overscroll",
@@ -6976,6 +6881,21 @@ ide_source_view_class_init (IdeSourceViewClass *klass)
                   G_TYPE_NONE,
                   1,
                   GTK_TYPE_DIRECTION_TYPE);
+
+  /**
+   * IdeSourceView:documentation-requested:
+   * @self: A #IdeSourceView
+   * @word: the word that was requested
+   *
+   * This is emitted by the default request-documentation handler to
+   * locate the documentation for the currently selected word.
+   */
+  signals [DOCUMENTATION_REQUESTED] =
+    g_signal_new ("documentation-requested",
+                  G_TYPE_FROM_CLASS (klass),
+                  G_SIGNAL_RUN_LAST,
+                  0, NULL, NULL, NULL,
+                  G_TYPE_NONE, 1, G_TYPE_STRING);
 
   signals [DECREASE_FONT_SIZE] =
     g_signal_new ("decrease-font-size",
@@ -7292,6 +7212,22 @@ ide_source_view_class_init (IdeSourceViewClass *klass)
                   NULL, NULL, NULL,
                   G_TYPE_NONE,
                   0);
+
+  /**
+   * IdeSourceView::reset:
+   *
+   * This is a helper signal that will try to reset keyboard input
+   * and various stateful settings of the sourceview. This is a good
+   * signal to map to the "Escape" key.
+   *
+   * Since: 3.26
+   */
+  signals [RESET] =
+    g_signal_new_class_handler ("reset",
+                                G_TYPE_FROM_CLASS (klass),
+                                G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION,
+                                G_CALLBACK (ide_source_view_real_reset),
+                                NULL, NULL, NULL, G_TYPE_NONE, 0);
 
   signals [RESET_FONT_SIZE] =
     g_signal_new ("reset-font-size",
@@ -9041,58 +8977,4 @@ ide_source_view_get_current_snippet (IdeSourceView *self)
   g_return_val_if_fail (IDE_IS_SOURCE_VIEW (self), NULL);
 
   return g_queue_peek_head (priv->snippets);
-}
-
-/* Set begin and end to NULL to remove the misspelled word marks */
-void
-ide_source_view_set_misspelled_word (IdeSourceView *self,
-                                     GtkTextIter   *begin,
-                                     GtkTextIter   *end)
-{
-  IdeSourceViewPrivate *priv = ide_source_view_get_instance_private (self);
-
-  g_return_if_fail (IDE_IS_SOURCE_VIEW (self));
-  g_return_if_fail ((begin == NULL && end == NULL) || (begin != NULL && end != NULL));
-
-  if (priv->misspelled_word_begin_mark != NULL && priv->misspelled_word_end_mark != NULL)
-    {
-      GtkTextIter previous_begin;
-      GtkTextIter previous_end;
-
-      gtk_text_buffer_get_iter_at_mark (GTK_TEXT_BUFFER (priv->buffer),
-                                        &previous_begin,
-                                        priv->misspelled_word_begin_mark);
-
-      gtk_text_buffer_get_iter_at_mark (GTK_TEXT_BUFFER (priv->buffer),
-                                        &previous_end,
-                                        priv->misspelled_word_end_mark);
-
-      gtk_text_buffer_remove_tag (GTK_TEXT_BUFFER (priv->buffer),
-                                  priv->spellchecker_bubble_tag,
-                                  &previous_begin, &previous_end);
-    }
-
-  if (begin == NULL)
-    {
-      if (priv->misspelled_word_begin_mark != NULL)
-        {
-          gtk_text_buffer_delete_mark (GTK_TEXT_BUFFER (priv->buffer), priv->misspelled_word_begin_mark);
-          priv->misspelled_word_begin_mark = NULL;
-        }
-
-      if (priv->misspelled_word_end_mark != NULL)
-        {
-          gtk_text_buffer_delete_mark (GTK_TEXT_BUFFER (priv->buffer), priv->misspelled_word_end_mark);
-          priv->misspelled_word_end_mark = NULL;
-        }
-    }
-  else
-    {
-      priv->misspelled_word_begin_mark = gtk_text_buffer_create_mark (GTK_TEXT_BUFFER (priv->buffer),
-                                                                      NULL, begin, TRUE);
-      priv->misspelled_word_end_mark = gtk_text_buffer_create_mark (GTK_TEXT_BUFFER (priv->buffer),
-                                                                    NULL, end, TRUE);
-
-      gtk_text_buffer_apply_tag (GTK_TEXT_BUFFER (priv->buffer), priv->spellchecker_bubble_tag, begin, end);
-    }
 }

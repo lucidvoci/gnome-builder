@@ -1,6 +1,6 @@
 /* ide-editor-view.h
  *
- * Copyright (C) 2015 Christian Hergert <christian@hergert.me>
+ * Copyright (C) 2017 Christian Hergert <chergert@redhat.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,12 +16,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef IDE_EDITOR_VIEW_H
-#define IDE_EDITOR_VIEW_H
+#pragma once
+
+#include <gtksourceview/gtksource.h>
 
 #include "buffers/ide-buffer.h"
+#include "layout/ide-layout-view.h"
 #include "sourceview/ide-source-view.h"
-#include "workbench/ide-layout-view.h"
 
 G_BEGIN_DECLS
 
@@ -29,9 +30,23 @@ G_BEGIN_DECLS
 
 G_DECLARE_FINAL_TYPE (IdeEditorView, ide_editor_view, IDE, EDITOR_VIEW, IdeLayoutView)
 
-IdeBuffer      *ide_editor_view_get_document              (IdeEditorView *self);
-IdeSourceView  *ide_editor_view_get_active_source_view    (IdeEditorView *self);
+IdeBuffer         *ide_editor_view_get_buffer                  (IdeEditorView     *self);
+IdeSourceView     *ide_editor_view_get_view                    (IdeEditorView     *self);
+const gchar       *ide_editor_view_get_language_id             (IdeEditorView     *self);
+void               ide_editor_view_scroll_to_line              (IdeEditorView     *self,
+                                                                guint              line);
+gboolean           ide_editor_view_get_auto_hide_map           (IdeEditorView     *self);
+void               ide_editor_view_set_auto_hide_map           (IdeEditorView     *self,
+                                                                gboolean           auto_hide_map);
+gboolean           ide_editor_view_get_show_map                (IdeEditorView     *self);
+void               ide_editor_view_set_show_map                (IdeEditorView     *self,
+                                                                gboolean           show_map);
+GtkSourceLanguage *ide_editor_view_get_language                (IdeEditorView     *self);
+void               ide_editor_view_set_language                (IdeEditorView     *self,
+                                                                GtkSourceLanguage *language);
+void               ide_editor_view_move_next_error             (IdeEditorView     *self);
+void               ide_editor_view_move_previous_error         (IdeEditorView     *self);
+void               ide_editor_view_move_next_search_result     (IdeEditorView     *self);
+void               ide_editor_view_move_previous_search_result (IdeEditorView     *self);
 
 G_END_DECLS
-
-#endif /* IDE_EDITOR_VIEW_H */

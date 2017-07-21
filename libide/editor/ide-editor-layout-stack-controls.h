@@ -16,15 +16,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef IDE_EDITOR_LAYOUT_STACK_CONTROLS_H
-#define IDE_EDITOR_LAYOUT_STACK_CONTROLS_H
+#pragma once
 
 #include <gtk/gtk.h>
 #include <dazzle.h>
 
-#include "editor/ide-editor-frame.h"
-#include "editor/ide-editor-tweak-widget.h"
-#include "editor/ide-editor-view.h"
 #include "editor/ide-editor-view.h"
 
 G_BEGIN_DECLS
@@ -38,8 +34,8 @@ struct _IdeEditorLayoutStackControls
   GtkBox                parent_instance;
 
   IdeEditorView        *view;
-  DzlBindingGroup      *document_bindings;
-  DzlSignalGroup       *document_signals;
+  DzlBindingGroup      *buffer_bindings;
+  DzlSignalGroup       *buffer_signals;
 
   DzlSimplePopover     *goto_line_popover;
   GtkMenuButton        *goto_line_button;
@@ -47,13 +43,9 @@ struct _IdeEditorLayoutStackControls
   DzlSimpleLabel       *line_label;
   DzlSimpleLabel       *column_label;
   GtkLabel             *range_label;
-  GtkMenuButton        *tweak_button;
-  IdeEditorTweakWidget *tweak_widget;
 };
 
 void ide_editor_layout_stack_controls_set_view (IdeEditorLayoutStackControls *self,
                                                 IdeEditorView                *view);
 
 G_END_DECLS
-
-#endif /* IDE_EDITOR_LAYOUT_STACK_CONTROLS_H */

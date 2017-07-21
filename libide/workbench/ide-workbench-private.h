@@ -22,7 +22,6 @@
 #include <libpeas/peas.h>
 
 #include "workbench/ide-perspective.h"
-#include "workbench/ide-perspective-menu-button.h"
 #include "workbench/ide-workbench.h"
 #include "workbench/ide-workbench-header-bar.h"
 
@@ -30,9 +29,10 @@ G_BEGIN_DECLS
 
 struct _IdeWorkbench
 {
-  GtkApplicationWindow       parent;
+  DzlApplicationWindow       parent;
 
   guint                      unloading : 1;
+  guint                      focus_mode : 1;
   guint                      disable_greeter : 1;
   guint                      early_perspectives_removed : 1;
   guint                      did_initial_editor_transition : 1;
@@ -40,15 +40,10 @@ struct _IdeWorkbench
   IdeContext                *context;
   GCancellable              *cancellable;
   PeasExtensionSet          *addins;
-  /*
-   * This does not contain all perspectives, just those
-   * that should be visible via the perspective selector.
-   */
-  GListStore                *perspectives;
 
   GtkStack                  *header_stack;
   IdeWorkbenchHeaderBar     *header_bar;
-  IdePerspectiveMenuButton  *perspective_menu_button;
+  DzlMenuButton             *perspective_menu_button;
   GtkStack                  *perspectives_stack;
   GtkSizeGroup              *header_size_group;
   GtkBox                    *message_box;

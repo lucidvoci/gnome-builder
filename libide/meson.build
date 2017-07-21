@@ -1,3 +1,28 @@
+libide_header_dir = pkgincludedir + '/libide'
+
+version_data = configuration_data()
+version_data.set('MAJOR_VERSION', MAJOR_VERSION)
+version_data.set('MINOR_VERSION', MINOR_VERSION)
+version_data.set('MICRO_VERSION', MICRO_VERSION)
+version_data.set('VERSION', meson.project_version())
+version_data.set_quoted('BUILD_CHANNEL', get_option('with_channel'))
+version_data.set_quoted('BUILD_TYPE', get_option('buildtype'))
+
+libide_version_h = configure_file(
+          input: 'ide-version.h.in',
+         output: 'ide-version.h',
+    install_dir: libide_header_dir,
+        install: true,
+  configuration: version_data)
+
+libide_build_ident_h = vcs_tag(
+     fallback: meson.project_version(),
+        input: 'ide-build-ident.h.in',
+       output: 'ide-build-ident.h',
+      install: true,
+  install_dir: libide_header_dir,
+)
+
 libide_enum_headers = [
   'buffers/ide-buffer.h',
   'buildsystem/ide-build-log.h',
@@ -13,10 +38,7 @@ libide_enum_headers = [
   'symbols/ide-symbol.h',
   'threading/ide-thread-pool.h',
   'vcs/ide-vcs-config.h',
-  'workbench/ide-layout-stack-split.h',
 ]
-
-libide_header_dir = pkgincludedir + '/libide'
 
 libide_enums = gnome.mkenums('ide-enums',
   h_template: 'ide-enums.h.in',
@@ -38,6 +60,7 @@ libide_public_headers = [
   'application/ide-application-credits.h',
   'application/ide-application-tool.h',
   'application/ide-application.h',
+  'buffers/ide-buffer-addin.h',
   'buffers/ide-buffer-change-monitor.h',
   'buffers/ide-buffer-manager.h',
   'buffers/ide-buffer.h',
@@ -76,7 +99,9 @@ libide_public_headers = [
   'directory/ide-directory-vcs.h',
   'doap/ide-doap-person.h',
   'doap/ide-doap.h',
+  'editor/ide-editor-addin.h',
   'editor/ide-editor-perspective.h',
+  'editor/ide-editor-sidebar.h',
   'editor/ide-editor-view-addin.h',
   'editor/ide-editor-view.h',
   'files/ide-file-settings.h',
@@ -88,6 +113,7 @@ libide_public_headers = [
   'highlighting/ide-highlight-engine.h',
   'highlighting/ide-highlight-index.h',
   'highlighting/ide-highlighter.h',
+  'history/ide-back-forward-controls.h',
   'history/ide-back-forward-item.h',
   'history/ide-back-forward-list.h',
   'langserv/ide-langserv-client.h',
@@ -100,6 +126,15 @@ libide_public_headers = [
   'langserv/ide-langserv-symbol-resolver.h',
   'langserv/ide-langserv-symbol-tree.h',
   'langserv/ide-langserv-util.h',
+  'layout/ide-layout-grid.h',
+  'layout/ide-layout-grid-column.h',
+  'layout/ide-layout-stack.h',
+  'layout/ide-layout-stack-addin.h',
+  'layout/ide-layout-stack-header.h',
+  'layout/ide-layout-view.h',
+  'layout/ide-layout-pane.h',
+  'layout/ide-layout-transient-sidebar.h',
+  'layout/ide-layout.h',
   'local/ide-local-device.h',
   'logging/ide-log.h',
   'plugins/ide-extension-adapter.h',
@@ -163,6 +198,8 @@ libide_public_headers = [
   'transfers/ide-transfer-button.h',
   'transfers/ide-transfers-button.h',
   'transfers/ide-transfers-progress-icon.h',
+  'util/ide-cell-renderer-fancy.h',
+  'util/ide-fancy-tree-view.h',
   'util/ide-flatpak.h',
   'util/ide-glib.h',
   'util/ide-gtk.h',
@@ -176,13 +213,6 @@ libide_public_headers = [
   'vcs/ide-vcs-initializer.h',
   'vcs/ide-vcs-uri.h',
   'vcs/ide-vcs.h',
-  'workbench/ide-layout-grid.h',
-  'workbench/ide-layout-pane.h',
-  'workbench/ide-layout-stack-split.h',
-  'workbench/ide-layout-stack.h',
-  'workbench/ide-layout-stack-addin.h',
-  'workbench/ide-layout-view.h',
-  'workbench/ide-layout.h',
   'workbench/ide-omni-bar.h',
   'workbench/ide-perspective.h',
   'workbench/ide-workbench-addin.h',
@@ -214,7 +244,10 @@ foreach header: libide_public_headers
   endif
 endforeach
 
-subdir('resources')
+libide_resources = gnome.compile_resources('ide-resources',
+  'libide.gresource.xml',
+  c_name: 'ide',
+)
 
 libide_icons_resources = gnome.compile_resources('ide-icons-resources',
   join_paths(meson.source_root(), 'data/icons/hicolor/icons.gresource.xml'),
@@ -227,6 +260,7 @@ libide_public_sources = [
   'application/ide-application-tool.c',
   'application/ide-application.c',
   'application/ide-application-open.c',
+  'buffers/ide-buffer-addin.c',
   'buffers/ide-buffer-change-monitor.c',
   'buffers/ide-buffer-manager.c',
   'buffers/ide-buffer.c',
@@ -265,7 +299,9 @@ libide_public_sources = [
   'directory/ide-directory-vcs.c',
   'doap/ide-doap-person.c',
   'doap/ide-doap.c',
+  'editor/ide-editor-addin.c',
   'editor/ide-editor-perspective.c',
+  'editor/ide-editor-sidebar.c',
   'editor/ide-editor-view-addin.c',
   'editor/ide-editor-view.c',
   'files/ide-file-settings.c',
@@ -276,6 +312,7 @@ libide_public_sources = [
   'highlighting/ide-highlight-engine.c',
   'highlighting/ide-highlight-index.c',
   'highlighting/ide-highlighter.c',
+  'history/ide-back-forward-controls.c',
   'history/ide-back-forward-item.c',
   'history/ide-back-forward-list-load.c',
   'history/ide-back-forward-list-save.c',
@@ -296,6 +333,15 @@ libide_public_sources = [
   'langserv/ide-langserv-symbol-tree.c',
   'langserv/ide-langserv-symbol-tree-private.h',
   'langserv/ide-langserv-util.c',
+  'layout/ide-layout-grid.c',
+  'layout/ide-layout-grid-column.c',
+  'layout/ide-layout-pane.c',
+  'layout/ide-layout-stack.c',
+  'layout/ide-layout-stack-addin.c',
+  'layout/ide-layout-stack-header.c',
+  'layout/ide-layout-transient-sidebar.c',
+  'layout/ide-layout-view.c',
+  'layout/ide-layout.c',
   'local/ide-local-device.c',
   'logging/ide-log.c',
   'plugins/ide-extension-adapter.c',
@@ -359,6 +405,8 @@ libide_public_sources = [
   'transfers/ide-transfer-button.c',
   'transfers/ide-transfers-button.c',
   'transfers/ide-transfers-progress-icon.c',
+  'util/ide-cell-renderer-fancy.c',
+  'util/ide-fancy-tree-view.c',
   'util/ide-flatpak.c',
   'util/ide-glib.c',
   'util/ide-gtk.c',
@@ -371,12 +419,6 @@ libide_public_sources = [
   'vcs/ide-vcs-initializer.c',
   'vcs/ide-vcs-uri.c',
   'vcs/ide-vcs.c',
-  'workbench/ide-layout-grid.c',
-  'workbench/ide-layout-pane.c',
-  'workbench/ide-layout-stack.c',
-  'workbench/ide-layout-stack-addin.c',
-  'workbench/ide-layout-view.c',
-  'workbench/ide-layout.c',
   'workbench/ide-omni-bar.c',
   'workbench/ide-perspective.c',
   'workbench/ide-workbench-addin.c',
@@ -389,20 +431,15 @@ libide_public_sources = [
 ]
 
 libide_generated_headers = [
+  libide_build_ident_h,
   libide_resources[1],
   libide_icons_resources[1],
   libide_enums[1],
   libide_debug_h,
+  libide_version_h,
 ]
 
 libide_args = []
-# TODO
-#libide_vcs_version = vcs_tag(
-#  input: 'ide-vcs-version.h.in',
-#  output: 'ide-vcs-version.h',
-#  command: '../build-aux/meson/meson_vcs_tag.sh',
-#  fallback: '',
-#)
 
 libide_sources = libide_generated_headers + libide_public_sources + [
   'application/ide-application-actions.c',
@@ -412,6 +449,7 @@ libide_sources = libide_generated_headers + libide_public_sources + [
   'application/ide-application-private.h',
   'application/ide-application-tests.c',
   'application/ide-application-tests.h',
+  'buffers/ide-buffer-private.h',
   'buildconfig/ide-buildconfig-plugin.c',
   'buildconfig/ide-buildconfig-pipeline-addin.c',
   'buildconfig/ide-buildconfig-pipeline-addin.h',
@@ -437,36 +475,23 @@ libide_sources = libide_generated_headers + libide_public_sources + [
   'buildui/ide-environment-editor-row.h',
   'buildui/ide-environment-editor.c',
   'buildui/ide-environment-editor.h',
-  'editor/ide-editor-frame-actions.c',
-  'editor/ide-editor-frame-actions.h',
-  'editor/ide-editor-frame-private.h',
-  'editor/ide-editor-frame.c',
-  'editor/ide-editor-frame.h',
-  'editor/ide-editor-map-bin.c',
-  'editor/ide-editor-map-bin.h',
-  'editor/ide-editor-plugin.c',
   'editor/ide-editor-layout-stack-addin.c',
   'editor/ide-editor-layout-stack-addin.h',
   'editor/ide-editor-layout-stack-controls.c',
   'editor/ide-editor-layout-stack-controls.h',
+  'editor/ide-editor-perspective-actions.c',
+  'editor/ide-editor-perspective-shortcuts.c',
+  'editor/ide-editor-plugin.c',
   'editor/ide-editor-print-operation.c',
   'editor/ide-editor-print-operation.h',
-  'editor/ide-editor-spell-navigator.c',
-  'editor/ide-editor-spell-navigator.h',
-  'editor/ide-editor-spell-utils.c',
-  'editor/ide-editor-spell-utils.h',
-  'editor/ide-editor-spell-dict.c',
-  'editor/ide-editor-spell-dict.h',
-  'editor/ide-editor-spell-language-popover.c',
-  'editor/ide-editor-spell-language-popover.h',
-  'editor/ide-editor-spell-widget.c',
-  'editor/ide-editor-spell-widget.h',
-  'editor/ide-editor-tweak-widget.c',
-  'editor/ide-editor-tweak-widget.h',
+  'editor/ide-editor-private.h',
+  'editor/ide-editor-properties.c',
+  'editor/ide-editor-properties.h',
+  'editor/ide-editor-search-bar.c',
+  'editor/ide-editor-search-bar.h',
   'editor/ide-editor-view-actions.c',
-  'editor/ide-editor-view-actions.h',
-  'editor/ide-editor-view-addin-private.h',
-  'editor/ide-editor-view-private.h',
+  'editor/ide-editor-view-settings.c',
+  'editor/ide-editor-view-shortcuts.c',
   'editor/ide-editor-workbench-addin.c',
   'editor/ide-editor-workbench-addin.h',
   'gconstructor.h',
@@ -484,6 +509,13 @@ libide_sources = libide_generated_headers + libide_public_sources + [
   'keybindings/ide-keybindings.h',
   'keybindings/ide-shortcuts-window.c',
   'keybindings/ide-shortcuts-window.h',
+  'layout/ide-layout-grid-actions.c',
+  'layout/ide-layout-grid-column-actions.c',
+  'layout/ide-layout-private.h',
+  'layout/ide-layout-stack-actions.c',
+  'layout/ide-layout-stack-shortcuts.c',
+  'layout/ide-shortcut-label.c', # todo: libdazzle
+  'layout/ide-shortcut-label.h', # todo: libdazzle
   'modelines/ide-modelines-file-settings.c',
   'modelines/ide-modelines-file-settings.h',
   'modelines/modeline-parser.c',
@@ -515,6 +547,8 @@ libide_sources = libide_generated_headers + libide_public_sources + [
   'sourceview/ide-source-view-capture.h',
   'sourceview/ide-source-view-movements.c',
   'sourceview/ide-source-view-movements.h',
+  'sourceview/ide-source-view-private.h',
+  'sourceview/ide-source-view-shortcuts.c',
   'sourceview/ide-text-iter.c',
   'sourceview/ide-text-iter.h',
   'sourceview/ide-text-util.c',
@@ -534,19 +568,8 @@ libide_sources = libide_generated_headers + libide_public_sources + [
   'util/ide-ref-ptr.h',
   'util/ide-window-settings.c',
   'util/ide-window-settings.h',
-  'workbench/ide-layout-stack-actions.c',
-  'workbench/ide-layout-stack-actions.h',
-  'workbench/ide-layout-stack-private.h',
-  'workbench/ide-layout-tab-bar.c',
-  'workbench/ide-layout-tab-bar.h',
-  'workbench/ide-layout-tab-bar-private.h',
-  'workbench/ide-layout-tab.c',
-  'workbench/ide-layout-tab.h',
-  'workbench/ide-layout-tab-private.h',
   'workbench/ide-omni-bar-row.c',
   'workbench/ide-omni-bar-row.h',
-  'workbench/ide-perspective-menu-button.c',
-  'workbench/ide-perspective-menu-button.h',
   'workbench/ide-workbench-actions.c',
   'workbench/ide-workbench-private.h',
   'workers/ide-worker-manager.c',
@@ -559,8 +582,6 @@ libgtksource_dep = dependency('gtksourceview-3.0', version: '>= 3.22.0')
 
 libide_deps = [
   dependency('pangoft2', version: '>= 1.38.0'),
-  dependency('gspell-1', version: '>= 1.2.0'),
-  dependency('enchant'),
   libgtksource_dep,
   libgio_dep,
   libgiounix_dep,
@@ -570,7 +591,6 @@ libide_deps = [
   libtemplate_glib_dep,
   libxml_dep,
   libgd_dep,
-  libnautilus_dep,
   libjson_glib_dep,
   libjsonrpc_glib_dep,
 ]

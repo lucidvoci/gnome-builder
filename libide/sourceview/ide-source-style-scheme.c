@@ -41,7 +41,7 @@ ide_source_style_scheme_apply_style (GtkSourceStyleScheme *style_scheme,
   gboolean italic = FALSE;
   gboolean italic_set = FALSE;
 
-  g_return_val_if_fail (GTK_SOURCE_IS_STYLE_SCHEME (style_scheme), FALSE);
+  g_return_val_if_fail (!style_scheme || GTK_SOURCE_IS_STYLE_SCHEME (style_scheme), FALSE);
   g_return_val_if_fail (style_name != NULL, FALSE);
 
   g_object_set (tag,
@@ -53,6 +53,9 @@ ide_source_style_scheme_apply_style (GtkSourceStyleScheme *style_scheme,
                 "style-set", FALSE,
                 NULL);
 
+  if (style_scheme == NULL)
+    return FALSE;
+
   style = gtk_source_style_scheme_get_style (style_scheme, style_name);
 
   if (style == NULL && (colon = strchr (style_name, ':')))
@@ -62,10 +65,10 @@ ide_source_style_scheme_apply_style (GtkSourceStyleScheme *style_scheme,
       g_snprintf (defname, sizeof defname, "def%s", colon);
 
       style = gtk_source_style_scheme_get_style (style_scheme, defname);
-
-      if (style == NULL)
-        return FALSE;
     }
+
+  if (style == NULL)
+    return FALSE;
 
   g_object_get (style,
                 "background", &background,
