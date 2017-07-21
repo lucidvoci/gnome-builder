@@ -1,6 +1,6 @@
-/* gbp-devhelp-plugin.c
+/* gbp-decumentation-card-plugin.c
  *
- * Copyright (C) 2015 Christian Hergert <chergert@redhat.com>
+ * Copyright (C) 2017 Lucie Charvat <luci.charvat@gmail.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,20 +19,12 @@
 #include <ide.h>
 #include <libpeas/peas.h>
 
-#include "gbp-devhelp-editor-view-addin.h"
-#include "gbp-devhelp-workbench-addin.h"
-#include "gbp-devhelp-documentation-provider.h"
+#include "gbp-documentation-card-view-addin.h"
 
 void
 peas_register_types (PeasObjectModule *module)
 {
   peas_object_module_register_extension_type (module,
                                               IDE_TYPE_EDITOR_VIEW_ADDIN,
-                                              GBP_TYPE_DEVHELP_EDITOR_VIEW_ADDIN);
-  peas_object_module_register_extension_type (module,
-                                              IDE_TYPE_WORKBENCH_ADDIN,
-                                              GBP_TYPE_DEVHELP_WORKBENCH_ADDIN);
-  peas_object_module_register_extension_type (module,
-                                              IDE_TYPE_DOCUMENTATION_PROVIDER,
-                                              GBP_TYPE_DEVHELP_DOCUMENTATION_PROVIDER);
+                                              GBP_TYPE_DOCUMENTATION_CARD_VIEW_ADDIN);
 }
