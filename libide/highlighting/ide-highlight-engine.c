@@ -329,7 +329,7 @@ ide_highlight_engine_tick (IdeHighlightEngine *self)
   if (gtk_text_iter_compare (&invalid_begin, &invalid_end) >= 0)
     IDE_GOTO (up_to_date);
 
-  /*Clear all our tags*/
+  /* Clear all our tags */
   for (tags_iter = self->private_tags; tags_iter; tags_iter = tags_iter->next)
     gtk_text_buffer_remove_tag (buffer,
                                 GTK_TEXT_TAG (tags_iter->data),
@@ -584,16 +584,19 @@ ide_highlight_engine__notify_language_cb (IdeHighlightEngine *self,
                                           GParamSpec         *pspec,
                                           IdeBuffer          *buffer)
 {
-  GtkSourceLanguage *language;
-  const gchar *lang_id = NULL;
-
   g_assert (IDE_IS_HIGHLIGHT_ENGINE (self));
   g_assert (IDE_IS_BUFFER (buffer));
 
-  if ((language = gtk_source_buffer_get_language (GTK_SOURCE_BUFFER (buffer))))
-    lang_id = gtk_source_language_get_id (language);
+  if (self->extension != NULL)
+    {
+      GtkSourceLanguage *language;
+      const gchar *lang_id = NULL;
 
-  ide_extension_adapter_set_value (self->extension, lang_id);
+      if ((language = gtk_source_buffer_get_language (GTK_SOURCE_BUFFER (buffer))))
+        lang_id = gtk_source_language_get_id (language);
+
+      ide_extension_adapter_set_value (self->extension, lang_id);
+    }
 }
 
 static void
@@ -650,7 +653,7 @@ ide_highlight_engine__bind_buffer_cb (IdeHighlightEngine *self,
   g_assert (IDE_IS_BUFFER (buffer));
   g_assert (DZL_IS_SIGNAL_GROUP (group));
 
-  ide_set_weak_pointer (&self->buffer, buffer);
+  self->buffer = buffer;
 
   g_object_set_qdata (G_OBJECT (buffer), engineQuark, self);
 
@@ -658,6 +661,9 @@ ide_highlight_engine__bind_buffer_cb (IdeHighlightEngine *self,
 
   self->invalid_begin = gtk_text_buffer_create_mark (text_buffer, NULL, &begin, TRUE);
   self->invalid_end = gtk_text_buffer_create_mark (text_buffer, NULL, &end, FALSE);
+
+  ide_highlight_engine__notify_style_scheme_cb (self, NULL, buffer);
+  ide_highlight_engine__notify_language_cb (self, NULL, buffer);
 
   ide_highlight_engine_reload (self);
 
@@ -713,7 +719,7 @@ ide_highlight_engine__unbind_buffer_cb (IdeHighlightEngine  *self,
     }
   g_clear_pointer (&self->public_tags, g_slist_free);
 
-  ide_clear_weak_pointer (&self->buffer);
+  self->buffer = NULL;
 
   IDE_EXIT;
 }
@@ -725,9 +731,7 @@ ide_highlight_engine_set_buffer (IdeHighlightEngine *self,
   g_assert (IDE_IS_HIGHLIGHT_ENGINE (self));
   g_assert (!buffer || GTK_IS_TEXT_BUFFER (buffer));
 
-  /*
-   * We can get GtkSourceBuffer intermittently here.
-   */
+  /* We can get GtkSourceBuffer intermittently here. */
   if (!buffer || IDE_IS_BUFFER (buffer))
     {
       dzl_signal_group_set_target (self->signal_group, buffer);
@@ -760,25 +764,34 @@ ide_highlight_engine__notify_extension (IdeHighlightEngine  *self,
                                         GParamSpec          *pspec,
                                         IdeExtensionAdapter *adapter)
 {
+  IdeHighlighter *highlighter;
+
   g_assert (IDE_IS_HIGHLIGHT_ENGINE (self));
   g_assert (IDE_IS_EXTENSION_ADAPTER (adapter));
 
-  ide_highlight_engine_set_highlighter (self, ide_extension_adapter_get_extension (adapter));
+  highlighter = ide_extension_adapter_get_extension (adapter);
+  g_return_if_fail (!highlighter || IDE_IS_HIGHLIGHTER (highlighter));
+
+  ide_highlight_engine_set_highlighter (self, highlighter);
 }
 
 static void
 ide_highlight_engine_constructed (GObject *object)
 {
   IdeHighlightEngine *self = (IdeHighlightEngine *)object;
+  IdeContext *context;
 
-  G_OBJECT_CLASS (ide_highlight_engine_parent_class)->constructed (object);
+  g_assert (IDE_IS_HIGHLIGHT_ENGINE (self));
 
-  self->extension = ide_extension_adapter_new (ide_object_get_context (IDE_OBJECT (self)),
+  /* We require a context at construction time */
+  context = ide_object_get_context (IDE_OBJECT (self));
+  g_assert (IDE_IS_CONTEXT (context));
+
+  self->extension = ide_extension_adapter_new (context,
                                                NULL,
                                                IDE_TYPE_HIGHLIGHTER,
                                                "Highlighter-Languages",
                                                NULL);
-
   g_signal_connect_object (self->extension,
                            "notify::extension",
                            G_CALLBACK (ide_highlight_engine__notify_extension),
@@ -791,22 +804,12 @@ ide_highlight_engine_dispose (GObject *object)
 {
   IdeHighlightEngine *self = (IdeHighlightEngine *)object;
 
-  ide_highlight_engine_set_buffer (self, NULL);
-
-  G_OBJECT_CLASS (ide_highlight_engine_parent_class)->dispose (object);
-}
-
-static void
-ide_highlight_engine_finalize (GObject *object)
-{
-  IdeHighlightEngine *self = (IdeHighlightEngine *)object;
-
+  g_clear_object (&self->signal_group);
   g_clear_object (&self->extension);
   g_clear_object (&self->highlighter);
   g_clear_object (&self->settings);
-  g_clear_object (&self->signal_group);
 
-  G_OBJECT_CLASS (ide_highlight_engine_parent_class)->finalize (object);
+  G_OBJECT_CLASS (ide_highlight_engine_parent_class)->dispose (object);
 }
 
 static void
@@ -858,7 +861,6 @@ ide_highlight_engine_class_init (IdeHighlightEngineClass *klass)
 
   object_class->constructed = ide_highlight_engine_constructed;
   object_class->dispose = ide_highlight_engine_dispose;
-  object_class->finalize = ide_highlight_engine_finalize;
   object_class->get_property = ide_highlight_engine_get_property;
   object_class->set_property = ide_highlight_engine_set_property;
 
@@ -939,6 +941,8 @@ ide_highlight_engine_new (IdeBuffer *buffer)
   g_return_val_if_fail (IDE_IS_BUFFER (buffer), NULL);
 
   context = ide_buffer_get_context (buffer);
+
+  g_return_val_if_fail (IDE_IS_CONTEXT (context), NULL);
 
   return g_object_new (IDE_TYPE_HIGHLIGHT_ENGINE,
                        "buffer", buffer,
@@ -1084,6 +1088,16 @@ void
 ide_highlight_engine_unpause (IdeHighlightEngine *self)
 {
   g_return_if_fail (IDE_IS_HIGHLIGHT_ENGINE (self));
+  g_return_if_fail (self->signal_group != NULL);
 
   dzl_signal_group_unblock (self->signal_group);
+
+  if (self->buffer != NULL)
+    {
+      /* Notify of some blocked signals */
+      ide_highlight_engine__notify_style_scheme_cb (self, NULL, self->buffer);
+      ide_highlight_engine__notify_language_cb (self, NULL, self->buffer);
+
+      ide_highlight_engine_reload (self);
+    }
 }

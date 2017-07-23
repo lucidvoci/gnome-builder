@@ -28,6 +28,7 @@
 #include "buildsystem/ide-build-pipeline.h"
 #include "buildsystem/ide-configuration-manager.h"
 #include "buildsystem/ide-configuration.h"
+#include "diagnostics/ide-diagnostic.h"
 #include "runtimes/ide-runtime.h"
 #include "runtimes/ide-runtime-manager.h"
 
@@ -44,10 +45,13 @@ struct _IdeBuildManager
   GTimer           *running_time;
 
   guint             diagnostic_count;
+  guint             error_count;
+  guint             warning_count;
 
   guint             timer_source;
 
   guint             can_build : 1;
+  guint             can_export : 1;
   guint             building : 1;
 };
 
@@ -64,11 +68,13 @@ enum {
   PROP_0,
   PROP_BUSY,
   PROP_CAN_BUILD,
+  PROP_ERROR_COUNT,
   PROP_HAS_DIAGNOSTICS,
   PROP_LAST_BUILD_TIME,
   PROP_MESSAGE,
   PROP_PIPELINE,
   PROP_RUNNING_TIME,
+  PROP_WARNING_COUNT,
   N_PROPS
 };
 
@@ -82,20 +88,28 @@ enum {
 static GParamSpec *properties [N_PROPS];
 static guint signals [N_SIGNALS];
 
-static const gchar *action_names[] = { "build", "clean", "install", "rebuild", "cancel" };
+static const gchar *build_action_names[] = {
+  "build", "clean", "install", "rebuild",
+};
+static const gchar *all_action_names[] = {
+  "build", "clean", "install", "rebuild", "export", "cancel",
+};
 
 static void
 ide_build_manager_propagate_action_enabled (IdeBuildManager *self)
 {
-  gboolean busy = ide_build_manager_get_busy (self);
-  gboolean can_build = ide_build_manager_get_can_build (self);
+  g_assert (IDE_IS_BUILD_MANAGER (self));
 
   g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_BUSY]);
-  g_action_group_action_enabled_changed (G_ACTION_GROUP (self), "cancel", busy);
-  g_action_group_action_enabled_changed (G_ACTION_GROUP (self), "build", !busy && can_build);
-  g_action_group_action_enabled_changed (G_ACTION_GROUP (self), "rebuild", !busy && can_build);
-  g_action_group_action_enabled_changed (G_ACTION_GROUP (self), "clean", !busy && can_build);
-  g_action_group_action_enabled_changed (G_ACTION_GROUP (self), "install", !busy && can_build);
+
+  for (guint i = 0; i < G_N_ELEMENTS (all_action_names); i++)
+    {
+      const gchar *name = all_action_names[i];
+      gboolean enabled;
+
+      enabled = g_action_group_get_action_enabled (G_ACTION_GROUP (self->actions), name);
+      g_action_group_action_enabled_changed (G_ACTION_GROUP (self), name, enabled);
+    }
 }
 
 static gboolean
@@ -163,9 +177,19 @@ ide_build_manager_handle_diagnostic (IdeBuildManager  *self,
   g_assert (IDE_IS_BUILD_PIPELINE (pipeline));
 
   self->diagnostic_count++;
-
   if (self->diagnostic_count == 1)
     g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_HAS_DIAGNOSTICS]);
+
+  if (ide_diagnostic_get_severity (diagnostic) > IDE_DIAGNOSTIC_WARNING)
+    {
+      self->error_count++;
+      g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_ERROR_COUNT]);
+    }
+  else
+    {
+      self->warning_count++;
+      g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_WARNING_COUNT]);
+    }
 
   IDE_EXIT;
 }
@@ -173,22 +197,29 @@ ide_build_manager_handle_diagnostic (IdeBuildManager  *self,
 static void
 ide_build_manager_update_action_enabled (IdeBuildManager *self)
 {
+  GAction *action;
   gboolean busy;
   gboolean can_build;
+  gboolean can_export = FALSE;
 
   g_assert (IDE_IS_BUILD_MANAGER (self));
 
   busy = ide_build_manager_get_busy (self);
   can_build = ide_build_manager_get_can_build (self);
-  for (guint i = 0; i < G_N_ELEMENTS (action_names); i++)
+
+  if (self->pipeline != NULL)
+    can_export = ide_build_pipeline_get_can_export (self->pipeline);
+
+  for (guint i = 0; i < G_N_ELEMENTS (build_action_names); i++)
     {
-      const gchar *name = action_names [i];
-      if (g_strcmp0 (name, "cancel") != 0)
-        {
-          GAction *action = g_action_map_lookup_action (G_ACTION_MAP (self->actions), name);
-          g_simple_action_set_enabled (G_SIMPLE_ACTION (action), !busy && can_build);
-        }
+      const gchar *name = build_action_names [i];
+
+      action = g_action_map_lookup_action (G_ACTION_MAP (self->actions), name);
+      g_simple_action_set_enabled (G_SIMPLE_ACTION (action), !busy && can_build);
     }
+
+  action = g_action_map_lookup_action (G_ACTION_MAP (self->actions), "export");
+  g_simple_action_set_enabled (G_SIMPLE_ACTION (action), !busy && can_build && can_export);
 
   ide_build_manager_propagate_action_enabled (self);
 }
@@ -370,6 +401,8 @@ ide_build_manager_invalidate_pipeline (IdeBuildManager *self)
   g_clear_pointer (&self->running_time, g_timer_destroy);
 
   self->diagnostic_count = 0;
+  self->error_count = 0;
+  self->warning_count = 0;
 
   context = ide_object_get_context (IDE_OBJECT (self));
 
@@ -412,10 +445,12 @@ ide_build_manager_invalidate_pipeline (IdeBuildManager *self)
                                     ide_build_manager_ensure_runtime_cb,
                                     g_steal_pointer (&task));
 
+  g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_ERROR_COUNT]);
   g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_HAS_DIAGNOSTICS]);
   g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_LAST_BUILD_TIME]);
   g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_MESSAGE]);
   g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_RUNNING_TIME]);
+  g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_WARNING_COUNT]);
 
   IDE_EXIT;
 }
@@ -534,6 +569,14 @@ ide_build_manager_get_property (GObject    *object,
       g_value_set_boolean (value, self->diagnostic_count > 0);
       break;
 
+    case PROP_ERROR_COUNT:
+      g_value_set_uint (value, self->error_count);
+      break;
+
+    case PROP_WARNING_COUNT:
+      g_value_set_uint (value, self->warning_count);
+      break;
+
     case PROP_PIPELINE:
       g_value_set_object (value, self->pipeline);
       break;
@@ -580,6 +623,13 @@ ide_build_manager_class_init (IdeBuildManagerClass *klass)
                           "If a build is actively executing",
                           FALSE,
                           G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
+
+  properties [PROP_ERROR_COUNT] =
+    g_param_spec_uint ("error-count",
+                       "Error Count",
+                       "The number of errors that have been seen in the current build",
+                       0, G_MAXUINT, 0,
+                       (G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
 
   /**
    * IdeBuildManager:has-diagnostics:
@@ -648,6 +698,13 @@ ide_build_manager_class_init (IdeBuildManagerClass *klass)
                         G_MAXINT64,
                         0,
                         G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
+
+  properties [PROP_WARNING_COUNT] =
+    g_param_spec_uint ("warning-count",
+                       "Warning Count",
+                       "The number of warnings that have been seen in the current build",
+                       0, G_MAXUINT, 0,
+                       (G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_properties (object_class, N_PROPS, properties);
 
@@ -794,6 +851,23 @@ ide_build_manager_action_install (GSimpleAction *action,
 }
 
 static void
+ide_build_manager_action_export (GSimpleAction *action,
+                                 GVariant      *param,
+                                 gpointer       user_data)
+{
+  IdeBuildManager *self = user_data;
+
+  IDE_ENTRY;
+
+  g_assert (G_IS_SIMPLE_ACTION (action));
+  g_assert (IDE_IS_BUILD_MANAGER (self));
+
+  ide_build_manager_execute_async (self, IDE_BUILD_PHASE_EXPORT, NULL, NULL, NULL);
+
+  IDE_EXIT;
+}
+
+static void
 ide_build_manager_init (IdeBuildManager *self)
 {
   GAction *cancel_action;
@@ -802,6 +876,7 @@ ide_build_manager_init (IdeBuildManager *self)
     { "build", ide_build_manager_action_build },
     { "cancel", ide_build_manager_action_cancel },
     { "clean", ide_build_manager_action_clean },
+    { "export", ide_build_manager_action_export },
     { "install", ide_build_manager_action_install },
     { "rebuild", ide_build_manager_action_rebuild },
   };
@@ -1116,6 +1191,8 @@ ide_build_manager_execute_async (IdeBuildManager     *self,
       g_clear_pointer (&self->last_build_time, g_date_time_unref);
       self->last_build_time = g_date_time_new_now_local ();
       self->diagnostic_count = 0;
+      self->warning_count = 0;
+      self->error_count = 0;
     }
 
   /*
@@ -1140,9 +1217,11 @@ ide_build_manager_execute_async (IdeBuildManager     *self,
                                     ide_build_manager_execute_cb,
                                     g_steal_pointer (&task));
 
+  g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_ERROR_COUNT]);
   g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_HAS_DIAGNOSTICS]);
   g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_LAST_BUILD_TIME]);
   g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_RUNNING_TIME]);
+  g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_WARNING_COUNT]);
 
   IDE_EXIT;
 }
@@ -1232,6 +1311,8 @@ ide_build_manager_clean_async (IdeBuildManager     *self,
   g_set_object (&self->cancellable, cancellable);
 
   self->diagnostic_count = 0;
+  self->error_count = 0;
+  self->warning_count = 0;
 
   ide_build_pipeline_clean_async (self->pipeline,
                                   phase,
@@ -1239,7 +1320,9 @@ ide_build_manager_clean_async (IdeBuildManager     *self,
                                   ide_build_manager_clean_cb,
                                   g_steal_pointer (&task));
 
+  g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_ERROR_COUNT]);
   g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_HAS_DIAGNOSTICS]);
+  g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_WARNING_COUNT]);
 
   IDE_EXIT;
 }

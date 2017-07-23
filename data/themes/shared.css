@@ -1,5 +1,6 @@
 @import url("resource:///org/gnome/builder/themes/shared/shared-layout.css");
 @import url("resource:///org/gnome/builder/themes/shared/shared-editor.css");
+@import url("resource:///org/gnome/builder/themes/shared/shared-omnibar.css");
 @import url("resource:///org/gnome/builder/themes/shared/shared-search.css");
 @import url("resource:///org/gnome/builder/themes/shared/shared-treeview.css");
 
@@ -11,54 +12,6 @@ filechooser actionbar button.combo {
 /* Generic styles */
 .warning {
     color: @warning_color;
-}
-
-/* styling for spellchecker */
-.gb-spellchecker list button.close:disabled,
-.gb-spellchecker list button.close {
-  background: none;
-  border: none;
-  box-shadow: none;
-  padding-left: 4px;
-  padding-right: 4px;
-}
-.gb-spellchecker list row label {
-  padding: 7px;
-}
-.gb-spellchecker list row {
-  border-bottom: 1px solid alpha(@borders, 0.2);
-}
-.gb-spellchecker list row:last-child {
-  border-bottom: none;
-}
-.countbox {
-  background-color: #b3d4fc;
-  border-radius: 3px;
-  padding: 3px;
-}
-
-
-
-/*
- * For our pattern of popover with lists (and close buttons).
- */
-popover list row {
-  padding: 6px;
-}
-popover list row button:not(.circular) {
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  margin: 0;
-  padding: 0;
-  opacity: 0.25;
-}
-popover list row:selected button:not(.circular),
-popover list row:selected button:hover:not(.circular) {
-  color: @theme_selected_fg_color;
-}
-popover list row button:hover:not(.circular) {
-  opacity: 1;
 }
 
 
@@ -119,52 +72,6 @@ treeview.dim-label {
 
 button.run-arrow-button {
   min-width: 12px;
-}
-
-
-popover.popover-selector list {
-  padding: 12px;
-}
-
-popover.popover-selector list row {
-  padding: 8px;
-}
-
-popover.popover-selector list row image {
-  min-height: 16px;
-  min-width: 16px;
-  margin-right: 12px;
-}
-popover.popover-selector list row image:dir(rtl) {
-  margin-right: 0px;
-  margin-left: 12px;
-}
-popover.popover-selector list row .accel {
-  margin-left: 20px;
-  margin-right: 0;
-}
-popover.popover-selector list row .accel:dir(rtl) {
-  margin-left: 0;
-  margin-right: 20px;
-}
-
-
-popover.omnibar list row {
-  border-bottom: 1px solid alpha(@borders, 0.4);
-}
-popover.omnibar list row:last-child {
-  border-bottom: none;
-}
-
-
-omnibar entry {
-  background-color: @theme_bg_color;
-  color: alpha(@theme_fg_color, 0.8);
-}
-omnibar:hover entry,
-omnibar:active entry {
-  background-color: mix(@theme_bg_color, @content_view_bg, 0.9);
-  color: @theme_fg_color;
 }
 
 

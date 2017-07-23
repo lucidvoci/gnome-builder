@@ -305,6 +305,8 @@ ide_layout_stack_header_view_row_activated (GtkListBox           *list_box,
   if (stack != NULL && view != NULL)
     ide_layout_stack_set_visible_child (IDE_LAYOUT_STACK (stack),
                                         IDE_LAYOUT_VIEW (view));
+
+  _ide_layout_stack_header_popdown (self);
 }
 
 static gboolean
@@ -347,7 +349,7 @@ ide_layout_stack_header_update_css (IdeLayoutStackHeader *self)
           for (guint i = 0; i < G_N_ELEMENTS (names); i++)
             {
               g_string_append_printf (str, "%s { ", names[i]);
-              g_string_append_printf (str, "  -gtk-icon-shadow: 0 -1px alpha(%s,0.543529);\n", fgstr);
+              g_string_append        (str, "  -gtk-icon-shadow: none;\n");
               g_string_append        (str, "  text-shadow: none;\n");
               g_string_append_printf (str, "  text-shadow: 0 -1px alpha(%s,0.05);\n", fgstr);
               g_string_append_printf (str, "  color: %s;\n", fgstr);

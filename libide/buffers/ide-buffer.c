@@ -1068,6 +1068,9 @@ ide_buffer_loaded (IdeBuffer *self)
   /* This is suspended until we've loaded */
   ide_highlight_engine_unpause (priv->highlight_engine);
 
+  /* Unblock our previously blocked signals */
+  dzl_signal_group_unblock (priv->diagnostics_manager_signals);
+
   IDE_EXIT;
 }
 
@@ -1193,6 +1196,9 @@ ide_buffer_constructed (GObject *object)
   GdkRGBA note_rgba;
   GdkRGBA warning_rgba;
 
+  g_assert (IDE_IS_BUFFER (self));
+  g_assert (IDE_IS_CONTEXT (priv->context));
+
   G_OBJECT_CLASS (ide_buffer_parent_class)->constructed (object);
 
   tag_table = gtk_text_buffer_get_tag_table (GTK_TEXT_BUFFER (self));
@@ -1219,28 +1225,28 @@ ide_buffer_constructed (GObject *object)
   warning_tag = gtk_text_tag_new (TAG_WARNING);
 
   if (!ide_source_style_scheme_apply_style (style_scheme, TAG_DEPRECATED, deprecated_tag))
-      apply_style (deprecated_tag,
-                   "underline", PANGO_UNDERLINE_ERROR,
-                   "underline-rgba", &deprecated_rgba,
-                   NULL);
+    apply_style (deprecated_tag,
+                 "underline", PANGO_UNDERLINE_ERROR,
+                 "underline-rgba", &deprecated_rgba,
+                 NULL);
 
   if (!ide_source_style_scheme_apply_style (style_scheme, TAG_ERROR, error_tag))
-      apply_style (error_tag,
-                   "underline", PANGO_UNDERLINE_ERROR,
-                   "underline-rgba", &error_rgba,
-                   NULL);
+    apply_style (error_tag,
+                 "underline", PANGO_UNDERLINE_ERROR,
+                 "underline-rgba", &error_rgba,
+                 NULL);
 
   if (!ide_source_style_scheme_apply_style (style_scheme, TAG_NOTE, note_tag))
-      apply_style (note_tag,
-                   "underline", PANGO_UNDERLINE_ERROR,
-                   "underline-rgba", &note_rgba,
-                   NULL);
+    apply_style (note_tag,
+                 "underline", PANGO_UNDERLINE_ERROR,
+                 "underline-rgba", &note_rgba,
+                 NULL);
 
   if (!ide_source_style_scheme_apply_style (style_scheme, TAG_NOTE, warning_tag))
-      apply_style (warning_tag,
-                   "underline", PANGO_UNDERLINE_ERROR,
-                   "underline-rgba", &warning_rgba,
-                   NULL);
+    apply_style (warning_tag,
+                 "underline", PANGO_UNDERLINE_ERROR,
+                 "underline-rgba", &warning_rgba,
+                 NULL);
 
   gtk_text_tag_table_add (tag_table, deprecated_tag);
   gtk_text_tag_table_add (tag_table, error_tag);
@@ -1708,6 +1714,8 @@ ide_buffer_init (IdeBuffer *self)
                                    G_CALLBACK (ide_buffer__diagnostics_manager__changed),
                                    self,
                                    G_CONNECT_SWAPPED);
+  /* Block signals until we've been loaded */
+  dzl_signal_group_block (priv->diagnostics_manager_signals);
 
   DZL_COUNTER_INC (instances);
 
