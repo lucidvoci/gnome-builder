@@ -201,7 +201,7 @@ get_devhelp_book (GbpDevhelpDocumentationProvider *self,
   link = dh_keyword_model_filter (self->keyword_model, info->input, NULL, NULL);
   if (link == NULL)
     return FALSE;
-
+  
   self->card->uri = dh_link_get_uri (link);
   self->card->book_name = dh_link_get_book_name (link);
 
@@ -216,7 +216,7 @@ gbp_devhelp_documentation_provider_get_name (IdeDocumentationProvider *provider)
 
 gboolean
 start_get_info (IdeDocumentationProvider *provider,
-                                             IdeDocumentationInfo     *info)
+                IdeDocumentationInfo     *info)
 {
   GbpDevhelpDocumentationProvider *self = (GbpDevhelpDocumentationProvider *)provider;
   gchar **tokens;

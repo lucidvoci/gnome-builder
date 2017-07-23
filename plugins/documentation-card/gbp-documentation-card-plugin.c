@@ -1,4 +1,4 @@
-/* gbp-decumentation-card-plugin.c
+/* gbp-documentation-card-plugin.c
  *
  * Copyright (C) 2017 Lucie Charvat <luci.charvat@gmail.com>
  *

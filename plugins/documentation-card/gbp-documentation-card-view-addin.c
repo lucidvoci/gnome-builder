@@ -58,11 +58,11 @@ motion_notify_event_cb (gpointer data)
   gchar *selected_text;
   gint x, y;
 
-  source_view = ide_editor_view_get_active_source_view (self->editor_view);
+  source_view = ide_editor_view_get_view (self->editor_view);
   if (source_view == NULL || !GTK_SOURCE_IS_VIEW (source_view))
     return FALSE;
 
-  buffer = ide_editor_view_get_document (self->editor_view);
+  buffer = ide_editor_view_get_buffer (self->editor_view);
   if (buffer == NULL)
     return FALSE;
 
@@ -90,7 +90,6 @@ motion_notify_event_cb (gpointer data)
     gtk_text_iter_forward_char (&end);
 
   selected_text = gtk_text_buffer_get_text (GTK_TEXT_BUFFER (buffer), &begin, &end, FALSE);
-
 
   if (!g_strcmp0 (selected_text, self->previous_text) == 0)
     {
