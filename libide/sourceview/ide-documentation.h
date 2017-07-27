@@ -32,7 +32,7 @@ G_DECLARE_FINAL_TYPE (IdeDocumentation,
                       IdeObject)
 typedef enum {
   NO_CONTEXT,
-  DOCUMENTATION_CARD,
+  CARD_C,
 } IdeDocumentationContext;
 
 typedef struct

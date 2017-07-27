@@ -35,7 +35,6 @@ struct _GbpDocumentationCard
   GdkDevice      *pointer;
 
   GtkButton    *button;
-  //GtkButton    *goto_button;
   GtkEntry     *entry;
   GtkLabel     *header;
   GtkLabel     *text;
@@ -82,38 +81,10 @@ card_popdown (gpointer data)
   gtk_popover_set_modal (GTK_POPOVER (self), FALSE);
 
   gtk_widget_set_visible (GTK_WIDGET (self->text), FALSE);
-  //gtk_widget_set_visible (GTK_WIDGET (self->goto_button), FALSE);
   gtk_widget_set_visible (GTK_WIDGET (self->button), TRUE);
 
   return FALSE;
 }
-
-/* static void */
-/* gbp_documentation_card__goto_button_clicked (GbpDocumentationCard *self, */
-/*                                              GtkButton            *goto_button) */
-/* { */
-/*   GbpDevhelpView *view = NULL; */
-/*   IdePerspective *perspective; */
-/*   IdeWorkbench *workbench; */
-
-/*   g_assert (GBP_IS_DEVHELP_DOCUMENTATION_CARD (self)); */
-/*   g_assert (GTK_IS_BUTTON (goto_button)); */
-
-/*   workbench = ide_widget_get_workbench (GTK_WIDGET (self)); */
-/*   g_assert (IDE_IS_WORKBENCH (workbench)); */
-
-/*   perspective = ide_workbench_get_perspective_by_name (workbench, "editor"); */
-/*   g_assert (IDE_IS_EDITOR_PERSPECTIVE (perspective)); */
-
-/*   view = g_object_new (GBP_TYPE_DEVHELP_VIEW, */
-/*                       "visible", TRUE, */
-/*                        NULL); */
-/*   gtk_container_add (GTK_CONTAINER (perspective), GTK_WIDGET (view)); */
-
-/*   gbp_devhelp_view_set_uri (view, self->uri); */
-/*   ide_workbench_focus (workbench, GTK_WIDGET (view)); */
-
-/* } */
 
 static void
 gbp_documentation_card__button_clicked (GbpDocumentationCard *self,
@@ -126,7 +97,6 @@ gbp_documentation_card__button_clicked (GbpDocumentationCard *self,
   gtk_label_set_width_chars (self->text, CARD_WIDTH);
 
   gtk_widget_set_visible (GTK_WIDGET (self->text), TRUE);
-  //gtk_widget_set_visible (GTK_WIDGET (self->goto_button), TRUE);
   gtk_widget_set_visible (GTK_WIDGET (self->button), FALSE);
 }
 
@@ -137,7 +107,6 @@ gbp_documentation_card_class_init (GbpDocumentationCardClass *klass)
 
   gtk_widget_class_set_template_from_resource (widget_class, "/org/gnome/builder/plugins/documentation-card/gbp-documentation-card.ui");
   gtk_widget_class_bind_template_child (widget_class, GbpDocumentationCard, button);
-  // gtk_widget_class_bind_template_child (widget_class, GbpDocumentationCard, goto_button);
   gtk_widget_class_bind_template_child (widget_class, GbpDocumentationCard, header);
   gtk_widget_class_bind_template_child (widget_class, GbpDocumentationCard, text);
 
@@ -157,11 +126,6 @@ gbp_documentation_card_init (GbpDocumentationCard *self)
                            self,
                            G_CONNECT_SWAPPED);
 
-  /* g_signal_connect_object (self->goto_button, */
-  /*                          "clicked", */
-  /*                          G_CALLBACK (gbp_documentation_card__goto_button_clicked), */
-  /*                          self, */
-  /*                          G_CONNECT_SWAPPED); */
 }
 
 void
@@ -174,7 +138,6 @@ gbp_documentation_card_set_text (GbpDocumentationCard *self,
 
   gtk_label_set_markup (self->text, card->text);
   gtk_label_set_markup (self->header, card->header);
-  //gtk_button_set_label (self->goto_button, info->book_name);
 }
 
 void

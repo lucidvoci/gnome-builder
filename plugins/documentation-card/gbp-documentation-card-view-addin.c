@@ -46,6 +46,7 @@ motion_notify_event_cb (gpointer data)
   GtkSourceLanguage *lang;
   IdeContext *context;
   IdeDocumentation *doc;
+  IdeDocumentationContext doc_context;
 
   GdkDisplay *display;
   GdkWindow *window;
@@ -70,7 +71,12 @@ motion_notify_event_cb (gpointer data)
   doc =  ide_context_get_documentation (context);
 
   lang = gtk_source_buffer_get_language (GTK_SOURCE_BUFFER (buffer));
-  if (lang == NULL || !ide_str_equal0 (gtk_source_language_get_id(lang), "c"))
+  if (lang == NULL)
+    return FALSE;
+
+  if (ide_str_equal0 (gtk_source_language_get_id(lang), "c"))
+    doc_context = CARD_C;
+  else
     return FALSE;
 
   window = gtk_widget_get_parent_window (GTK_WIDGET (self->editor_view));
@@ -93,7 +99,7 @@ motion_notify_event_cb (gpointer data)
 
   if (!g_strcmp0 (selected_text, self->previous_text) == 0)
     {
-      info = ide_documentation_get_info (doc, selected_text, DOCUMENTATION_CARD);
+      info = ide_documentation_get_info (doc, selected_text, doc_context);
       if (g_list_length (info->proposals) == 0)
         {
           gbp_documentation_card_popdown (self->popover);

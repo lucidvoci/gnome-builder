@@ -61,13 +61,12 @@ enum
   MAKE_POINT_NEW_LINE,
   INFORMAL_EXAMPLE,
   INFORMAL_EXAMPLE_END,
+  CLEAN_UP,
 
   N_REGEXES
 };
 
 static GRegex *regexes [N_REGEXES];
-
-static pthread_t last_thread = 0;
 
 static IdeDocumentationInfoCard*
 card_create ()
@@ -76,25 +75,10 @@ card_create ()
 
   init_card = g_slice_new0 (IdeDocumentationInfoCard);
 
-  g_print ("\nObj created");
   init_card->header = NULL;
   init_card->text = NULL;
-  init_card->book_name = NULL;
+  init_card->book_name = "";
   init_card->uri = NULL;
-
-  if (last_thread == 0)
-  {
-	  last_thread = pthread_self();
-  }
-  else if (!pthread_equal(pthread_self(), last_thread))
-  {
-	  g_print("card create, thread mismatch -- current %ld vs last %ld\n", pthread_self(), last_thread);
-	  last_thread = pthread_self();
-  }
-  else
-  {
-	  last_thread = pthread_self();
-  }
 
   return init_card;
 }
@@ -105,24 +89,8 @@ card_free (IdeDocumentationInfoCard *card)
   if (card == NULL)
     return;
 
-  if (last_thread == 0)
-  {
-	  last_thread = pthread_self();
-  }
-  else if (!pthread_equal(pthread_self(), last_thread))
-  {
-	  g_print("card create, thread mismatch -- current %ld vs last %ld\n", pthread_self(), last_thread);
-	  last_thread = pthread_self();
-  }
-  else
-  {
-	  last_thread = pthread_self();
-  }
-
-  g_print (" -> Obj cleared");
   g_clear_pointer (&card->header, g_free);
   g_clear_pointer (&card->text, g_free);
-  g_clear_pointer (&card->book_name, g_free);
   g_clear_pointer (&card->uri, g_free);
 
   g_slice_free (IdeDocumentationInfoCard, card);
@@ -197,6 +165,7 @@ xml_parse (GbpDevhelpDocumentationProvider *self,
               text_tag = TRUE;
               continue;
             }
+          line = regex_replace_line (regexes[CLEAN_UP], line, "\n");
           g_string_append_printf (header, "%s\n", line);
         }
       if (text_tag)
@@ -227,6 +196,8 @@ xml_parse (GbpDevhelpDocumentationProvider *self,
           if (g_regex_match (regexes[END_TEXT], line, 0, &match_info))
             break;
 
+          line = regex_replace_line (regexes[CLEAN_UP], line, "\n");
+
           if (informal_example_bool)
             g_string_append_printf (text, "\n<tt>%s</tt>", line);
           else
@@ -255,7 +226,6 @@ get_devhelp_book (GbpDevhelpDocumentationProvider *self,
 
   self->card->uri = dh_link_get_uri (link);
   self->card->book_name = dh_link_get_book_name (link);
-
   return TRUE;
 }
 
@@ -302,17 +272,14 @@ gbp_devhelp_documentation_provider_get_info (IdeDocumentationProvider *provider,
 
   g_assert (GBP_IS_DEVHELP_DOCUMENTATION_PROVIDER (self));
 
-  self->card = g_slice_new0 (IdeDocumentationInfoCard); // card_create ();
+  self->card = card_create ();
 
   parse_succ = start_get_info (provider, info);
 
   if (parse_succ)
-  {
     info->proposals = g_list_append (info->proposals, self->card);
-    //g_print (" -> Obj accepted");
-  }
-  //else
-   // card_free (self->card);
+  else
+    card_free (self->card);
 }
 
 IdeDocumentationContext
@@ -332,7 +299,7 @@ gbp_devhelp_documentation_provider_constructed (GObject *object)
   context = ide_object_get_context (IDE_OBJECT (self));
   self->documentation = ide_context_get_documentation (context);
   self->keyword_model = dh_keyword_model_new ();
-  self->context = DOCUMENTATION_CARD;
+  self->context = CARD_C;
 }
 
 static void
@@ -346,8 +313,8 @@ gbp_devhelp_documentation_provider_class_init (GbpDevhelpDocumentationProviderCl
   regexes[END_HEADER] = g_regex_new ("</pre.*", 0, 0, NULL);
   regexes[END_TEXT] = g_regex_new ("<hr>", 0, 0, NULL);
 
-  regexes[REMOVE_TAG_HEADER] = g_regex_new ("</?code.*?>|</?a.*?>|<h3.*/h3>|</?table.*?>|</?col.*?>|</?em.*?>|<p.*?>", 0, 0, NULL);
-  regexes[REMOVE_TAG_TEXT] = g_regex_new ("<p.*?>|</?pre.*?>|</?div.*>|</li>|\\s*</?td.*?>|</?tbody>|</?ul.*?>|</?span.*?>|</?code.*?>|</?table.*?>|</?col.*?>|</?em.*?>|</?acronym.*?>", 0, 0, NULL);
+  regexes[REMOVE_TAG_HEADER] = g_regex_new ("<p.*?>|</?[ace].*?>|</?ta.*?>|<h3.*/h3>", 0, 0, NULL);
+  regexes[REMOVE_TAG_TEXT] = g_regex_new ("<p.*?>|</?[cdelsu].*?>|</?t[dba].*?>|</?ac.*?>|</?pre.*?>|\\s*</?td.*?>", 0, 0, NULL);
   regexes[REMOVE_MULTI_SPACES] = g_regex_new ("^\\s*$|^[\\d|\\s]*$", 0, 0, NULL);
   regexes[NEW_LINE] = g_regex_new ("</tr>|</p>", 0, 0, NULL);
   regexes[NEW_PARAGRAPH] = g_regex_new ("</p></td>", 0, 0, NULL);
@@ -358,6 +325,7 @@ gbp_devhelp_documentation_provider_class_init (GbpDevhelpDocumentationProviderCl
   regexes[MAKE_POINT_NEW_LINE] = g_regex_new ("<li.*?>|<tr>", 0, 0, NULL);
   regexes[INFORMAL_EXAMPLE] = g_regex_new ("<div class=\"informalexample\">", 0, 0, NULL);
   regexes[INFORMAL_EXAMPLE_END] = g_regex_new ("</div>", 0, 0, NULL);
+  regexes[CLEAN_UP] = g_regex_new ("</?[acdehlpsu].*?>|</?td.*?>|</?ta.*?>|</?tb.*?>", 0, 0, NULL);
 }
 
 static void
