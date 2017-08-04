@@ -50,6 +50,23 @@
                 </style>
               </object>
             </child>
+            <child>
+              <object class="GtkButton" id="close_button">
+                <property name="action-name">dockbin.right-visible</property>
+                <property name="visible">true</property>
+                <style>
+                  <class name="control"/>
+                  <class name="flat"/>
+                </style>
+                <child>
+                  <object class="GtkImage">
+                    <property name="icon-name">window-close-symbolic</property>
+                    <property name="pixel-size">12</property>
+                    <property name="visible">true</property>
+                  </object>
+                </child>
+              </object>
+            </child>
           </object>
           <packing>
             <property name="left_attach">1</property>
@@ -204,6 +221,7 @@
         </child>
         <child>
           <object class="GtkBox">
+            <property name="visible">true</property>
             <property name="orientation">horizontal</property>
             <property name="spacing">6</property>
             <child>

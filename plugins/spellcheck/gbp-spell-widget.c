@@ -246,10 +246,16 @@ check_word_timeout_cb (GbpSpellWidget *self)
         {
           g_message ("check error:%s\n", error->message);
         }
-
-      if (!ret)
-        icon_name = "dialog-warning-symbolic";
     }
+
+  if (!ret)
+    {
+      icon_name = "dialog-warning-symbolic";
+      gtk_widget_set_tooltip_text (GTK_WIDGET (self->word_entry),
+                                   _("The word is not in the dictionary"));
+    }
+  else
+    gtk_widget_set_tooltip_text (GTK_WIDGET (self->word_entry), NULL);
 
   gtk_entry_set_icon_from_icon_name (self->word_entry,
                                      GTK_ENTRY_ICON_SECONDARY,
@@ -762,7 +768,7 @@ gbp_spell_widget__populate_popup_cb (GbpSpellWidget *self,
   checker = gbp_spell_editor_view_addin_get_checker (self->editor_view_addin);
   text = gtk_entry_get_text (entry);
 
-  if (self->is_word_entry_valid || ide_str_empty0 (text))
+  if (!self->is_word_entry_valid && !ide_str_empty0 (text))
     suggestions = gspell_checker_get_suggestions (checker, text, -1);
 
   if (suggestions == NULL)
@@ -829,11 +835,22 @@ gbp_spell_widget__word_label_notify_cb (GbpSpellWidget *self,
 }
 
 static void
+gbp_spell_widget__close_button_clicked_cb (GbpSpellWidget *self,
+                                           GtkButton      *close_button)
+{
+  g_assert (GBP_IS_SPELL_WIDGET (self));
+  g_assert (GTK_IS_BUTTON (close_button));
+
+  gbp_spell_widget_set_editor (self, NULL);
+}
+
+static void
 gbp_spell_widget_constructed (GObject *object)
 {
   GbpSpellWidget *self = (GbpSpellWidget *)object;
 
   _gbp_spell_widget_init_actions (self);
+  gbp_spell_widget__word_entry_changed_cb (self, self->word_entry);
 
   g_signal_connect_swapped (self->word_entry,
                             "changed",
@@ -869,6 +886,11 @@ gbp_spell_widget_constructed (GObject *object)
   g_signal_connect_swapped (self->dict_word_entry,
                             "changed",
                             G_CALLBACK (gbp_spell_widget__dict_word_entry_changed_cb),
+                            self);
+
+  g_signal_connect_swapped (self->close_button,
+                            "clicked",
+                            G_CALLBACK (gbp_spell_widget__close_button_clicked_cb),
                             self);
 
   self->placeholder = gtk_label_new (NULL);
@@ -1025,6 +1047,7 @@ gbp_spell_widget_class_init (GbpSpellWidgetClass *klass)
   gtk_widget_class_bind_template_child (widget_class, GbpSpellWidget, dict_add_button);
   gtk_widget_class_bind_template_child (widget_class, GbpSpellWidget, dict_words_list);
   gtk_widget_class_bind_template_child (widget_class, GbpSpellWidget, count_box);
+  gtk_widget_class_bind_template_child (widget_class, GbpSpellWidget, close_button);
 
   g_type_ensure (GBP_TYPE_SPELL_LANGUAGE_POPOVER);
 }
@@ -1036,22 +1059,12 @@ gbp_spell_widget_init (GbpSpellWidget *self)
 
   gtk_widget_init_template (GTK_WIDGET (self));
 
-  /* FIXME: do not work, Gtk+ bug */
-  gtk_entry_set_icon_tooltip_text (self->word_entry,
-                                   GTK_ENTRY_ICON_SECONDARY,
-                                   _("The word is not in the dictionary"));
-
   g_signal_connect_swapped (self->dict_words_list,
                             "key-press-event",
                             G_CALLBACK (dict_row_key_pressed_event_cb),
                             self);
 
   self->editor_view_addin_signals = dzl_signal_group_new (GBP_TYPE_SPELL_EDITOR_VIEW_ADDIN);
-
-  dzl_signal_group_connect_swapped (self->editor_view_addin_signals,
-                                    "notify::words-counted",
-                                    G_CALLBACK (gbp_spell_widget__words_counted_cb),
-                                    self);
 
   g_signal_connect_swapped (self->editor_view_addin_signals,
                             "bind",
@@ -1086,6 +1099,8 @@ void
 gbp_spell_widget_set_editor (GbpSpellWidget *self,
                              IdeEditorView  *editor)
 {
+  GspellNavigator *navigator;
+
   g_return_if_fail (GBP_IS_SPELL_WIDGET (self));
   g_return_if_fail (!editor || IDE_IS_EDITOR_VIEW (editor));
 
@@ -1094,7 +1109,15 @@ gbp_spell_widget_set_editor (GbpSpellWidget *self,
       IdeEditorViewAddin *addin = NULL;
 
       if (editor != NULL)
-        addin = ide_editor_view_addin_find_by_module_name (editor, "spellcheck-plugin");
+        {
+          addin = ide_editor_view_addin_find_by_module_name (editor, "spellcheck-plugin");
+          navigator = gbp_spell_editor_view_addin_get_navigator (GBP_SPELL_EDITOR_VIEW_ADDIN (addin));
+          g_signal_connect_object (navigator,
+                                   "notify::words-counted",
+                                   G_CALLBACK (gbp_spell_widget__words_counted_cb),
+                                   self,
+                                   G_CONNECT_SWAPPED);
+        }
 
       dzl_signal_group_set_target (self->editor_view_addin_signals, addin);
 

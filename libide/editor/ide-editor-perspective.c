@@ -206,7 +206,7 @@ ide_editor_perspective_create_edge (DzlDockBin      *dock_bin,
     return g_object_new (IDE_TYPE_LAYOUT_TRANSIENT_SIDEBAR,
                          "edge", edge,
                          "reveal-child", FALSE,
-                         "visible", TRUE,
+                         "visible", FALSE,
                          NULL);
 
   return DZL_DOCK_BIN_CLASS (ide_editor_perspective_parent_class)->create_edge (dock_bin, edge);
@@ -254,9 +254,6 @@ ide_editor_perspective_init (IdeEditorPerspective *self)
 
   gtk_widget_init_template (GTK_WIDGET (self));
 
-  sidebar = ide_editor_perspective_get_sidebar (self);
-  _ide_editor_sidebar_set_open_pages (sidebar, G_LIST_MODEL (self->grid));
-
   _ide_editor_perspective_init_actions (self);
   _ide_editor_perspective_init_shortcuts (self);
 
@@ -264,6 +261,9 @@ ide_editor_perspective_init (IdeEditorPerspective *self)
                             "notify::current-view",
                             G_CALLBACK (ide_editor_perspective_notify_current_view),
                             self);
+
+  sidebar = ide_editor_perspective_get_sidebar (self);
+  _ide_editor_sidebar_set_open_pages (sidebar, G_LIST_MODEL (self->grid));
 }
 
 /**
@@ -782,5 +782,6 @@ _ide_editor_perspective_show_properties (IdeEditorPerspective *self,
 
   ide_editor_properties_set_view (self->properties, view);
   ide_layout_transient_sidebar_set_view (sidebar, (IdeLayoutView *)view);
+  ide_layout_transient_sidebar_set_panel (sidebar, GTK_WIDGET (self->properties));
   g_object_set (self, "right-visible", view != NULL, NULL);
 }
