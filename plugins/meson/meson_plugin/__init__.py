@@ -17,7 +17,6 @@
 
 from os import path
 import threading
-import shutil
 import json
 import gi
 
@@ -32,7 +31,8 @@ from gi.repository import (
 
 _ = Ide.gettext
 
-_NINJA_NAMES = [ 'ninja-build', 'ninja' ]
+_NINJA_NAMES = ['ninja-build', 'ninja']
+
 
 def execInRuntime(runtime, *args, **kwargs):
     directory = kwargs.get('directory', None)
@@ -44,17 +44,21 @@ def execInRuntime(runtime, *args, **kwargs):
     _, stdout, stderr = proc.communicate_utf8(None, None)
     return stdout
 
+
 def extract_flags(command: str, builddir: str):
     flags = GLib.shell_parse_argv(command)[1] # Raises on failure
     wanted_flags = []
-    for flag in flags:
+    for i, flag in enumerate(flags):
         if flag.startswith('-I'):
             # All paths are relative to build
             abspath = path.normpath(path.join(builddir, flag[2:]))
             wanted_flags.append('-I' + abspath)
         elif flag.startswith(('-isystem', '-W', '-D', '-std')):
             wanted_flags.append(flag)
+        elif flag == '-include':
+            wanted_flags += [flag, flags[i + 1]]
     return wanted_flags
+
 
 class MesonBuildSystem(Ide.Object, Ide.BuildSystem, Gio.AsyncInitable):
     project_file = GObject.Property(type=Gio.File)
@@ -121,9 +125,17 @@ class MesonBuildSystem(Ide.Object, Ide.BuildSystem, Gio.AsyncInitable):
                 return
 
             infile = task.ifile.get_path()
+            # If this is a header file we want the flags for a C/C++/Objc file.
+            # (Extensions Match GtkSourceViews list)
+            is_header = infile.endswith(('.h', '.hpp', '.hh', '.h++', '.hp'))
+            if is_header:
+                # So just try to find a compilable file with the same prefix as
+                # that is *probably* correct.
+                infile = infile.rpartition('.')[0] + '.'
             for c in commands:
                 filepath = path.normpath(path.join(c['directory'], c['file']))
-                if filepath == infile:
+                if (is_header is False and filepath == infile) or \
+                   (is_header is True and filepath.startswith(infile)):
                     try:
                         task.build_flags = extract_flags(c['command'], builddir)
                     except GLib.Error as e:
