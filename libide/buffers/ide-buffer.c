@@ -875,11 +875,6 @@ ide_buffer__file_notify_language (IdeBuffer  *self,
   g_assert (IDE_IS_BUFFER (self));
   g_assert (IDE_IS_FILE (file));
 
-  /*
-   * FIXME: Workaround for 3.16.3
-   *        This should be refactored as part of the move to libpeas.
-   */
-
   language = ide_file_get_language (file);
   gtk_source_buffer_set_language (GTK_SOURCE_BUFFER (self), language);
 
@@ -1071,6 +1066,11 @@ ide_buffer_loaded (IdeBuffer *self)
   /* Unblock our previously blocked signals */
   dzl_signal_group_unblock (priv->diagnostics_manager_signals);
 
+  /* Now we can reload the change monitor which was probably skipped
+   * during the early initializtion.
+   */
+  ide_buffer_reload_change_monitor (self);
+
   IDE_EXIT;
 }
 
@@ -1181,10 +1181,8 @@ ide_buffer_addin_removed (PeasExtensionSet *set,
 }
 
 static void
-ide_buffer_constructed (GObject *object)
+ide_buffer_init_tags (IdeBuffer *self)
 {
-  IdeBuffer *self = (IdeBuffer *)object;
-  IdeBufferPrivate *priv = ide_buffer_get_instance_private (self);
   GtkTextTagTable *tag_table;
   GtkSourceStyleScheme *style_scheme;
   g_autoptr(GtkTextTag) deprecated_tag = NULL;
@@ -1197,9 +1195,6 @@ ide_buffer_constructed (GObject *object)
   GdkRGBA warning_rgba;
 
   g_assert (IDE_IS_BUFFER (self));
-  g_assert (IDE_IS_CONTEXT (priv->context));
-
-  G_OBJECT_CLASS (ide_buffer_parent_class)->constructed (object);
 
   tag_table = gtk_text_buffer_get_tag_table (GTK_TEXT_BUFFER (self));
   style_scheme = gtk_source_buffer_get_style_scheme (GTK_SOURCE_BUFFER (self));
@@ -1259,11 +1254,25 @@ ide_buffer_constructed (GObject *object)
                               "underline", PANGO_UNDERLINE_SINGLE,
                               NULL);
 
-  g_signal_connect_object (gtk_text_buffer_get_tag_table (GTK_TEXT_BUFFER (self)),
+  g_signal_connect_object (tag_table,
                            "tag-added",
                            G_CALLBACK (ide_buffer_on_tag_added),
                            self,
                            G_CONNECT_SWAPPED);
+}
+
+static void
+ide_buffer_constructed (GObject *object)
+{
+  IdeBuffer *self = (IdeBuffer *)object;
+  IdeBufferPrivate *priv = ide_buffer_get_instance_private (self);
+
+  g_assert (IDE_IS_BUFFER (self));
+  g_assert (IDE_IS_CONTEXT (priv->context));
+
+  G_OBJECT_CLASS (ide_buffer_parent_class)->constructed (object);
+
+  ide_buffer_init_tags (self);
 
   priv->highlight_engine = ide_highlight_engine_new (self);
   ide_highlight_engine_pause (priv->highlight_engine);

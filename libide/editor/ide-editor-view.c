@@ -28,6 +28,7 @@
 #include "ide-macros.h"
 
 #include "editor/ide-editor-private.h"
+#include "sourceview/ide-line-change-gutter-renderer.h"
 #include "util/ide-gtk.h"
 
 #define AUTO_HIDE_TIMEOUT_SECONDS 5
@@ -477,25 +478,39 @@ search_revealer_notify_reveal_child (IdeEditorView *self,
   if (!gtk_revealer_get_reveal_child (revealer))
     {
       /*
-       * Cancel any pending work by the context and release it. We don't need
-       * to hold onto these when they aren't being used because they handle
-       * buffer signals and other extraneous operations.
+       * Clear the context from the search bar so it doesn't try to
+       * keep updating various UI bits while the bar is not visible.
        */
       ide_editor_search_bar_set_context (self->search_bar, NULL);
-      g_clear_object (&self->search_context);
+
+      /*
+       * If there are no occurrences currently, just destroy the search context
+       * so that we can avoid tracking buffer changes.
+       */
+      if (self->search_context != NULL &&
+          gtk_source_search_context_get_occurrences_count (self->search_context) <= 0)
+        g_clear_object (&self->search_context);
+
+      /*
+       * We might still need the search context so the user can move to the
+       * prev/next search result. However, we do not any longer need to have
+       * highlight enabled.
+       */
+      if (self->search_context != NULL)
+        gtk_source_search_context_set_highlight (self->search_context, FALSE);
 
       /* Restore completion that we blocked below. */
       gtk_source_completion_unblock_interactive (completion);
     }
   else
     {
-      g_assert (self->search_context == NULL);
+      if (self->search_context == NULL)
+        self->search_context = g_object_new (GTK_SOURCE_TYPE_SEARCH_CONTEXT,
+                                             "buffer", self->buffer,
+                                             "settings", self->search_settings,
+                                             NULL);
 
-      self->search_context = g_object_new (GTK_SOURCE_TYPE_SEARCH_CONTEXT,
-                                           "buffer", self->buffer,
-                                           "highlight", TRUE,
-                                           "settings", self->search_settings,
-                                           NULL);
+      gtk_source_search_context_set_highlight (self->search_context, TRUE);
       ide_editor_search_bar_set_context (self->search_bar, self->search_context);
 
       /*
@@ -511,10 +526,20 @@ static void
 ide_editor_view_constructed (GObject *object)
 {
   IdeEditorView *self = (IdeEditorView *)object;
+  GtkSourceGutterRenderer *renderer;
+  GtkSourceGutter *gutter;
 
   g_assert (IDE_IS_EDITOR_VIEW (self));
 
   G_OBJECT_CLASS (ide_editor_view_parent_class)->constructed (object);
+
+  gutter = gtk_source_view_get_gutter (GTK_SOURCE_VIEW (self->map), GTK_TEXT_WINDOW_LEFT);
+  renderer = g_object_new (IDE_TYPE_LINE_CHANGE_GUTTER_RENDERER,
+                           "show-line-deletions", TRUE,
+                           "size", 1,
+                           "visible", TRUE,
+                           NULL);
+  gtk_source_gutter_insert (gutter, renderer, 0);
 
   _ide_editor_view_init_actions (self);
   _ide_editor_view_init_shortcuts (self);

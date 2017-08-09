@@ -49,6 +49,7 @@
         "--filesystem=~/.local/share/flatpak",
         "--filesystem=/var/lib/flatpak"
     ],
+    "x-run-args" : [ "--standalone", "-vvvv" ],
     "build-options" : {
         "cflags": "-O2 -g",
         "cxxflags": "-O2 -g",
@@ -533,11 +534,11 @@
         },
         {
             "name": "json-glib",
+	    "buildsystem": "meson",
+	    "builddir": true,
             "sources": [
                 {
                     "type": "git",
-                    "buildsystem": "meson",
-                    "builddir": true,
                     "url": "https://git.gnome.org/browse/json-glib"
                 }
             ]
