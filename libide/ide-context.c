@@ -50,7 +50,7 @@
 #include "search/ide-search-engine.h"
 #include "search/ide-search-provider.h"
 #include "snippets/ide-source-snippets-manager.h"
-#include "sourceview/ide-documentation.h"
+#include "documentation/ide-documentation.h"
 #include "transfers/ide-transfer-manager.h"
 #include "util/ide-async-helper.h"
 #include "util/ide-settings.h"

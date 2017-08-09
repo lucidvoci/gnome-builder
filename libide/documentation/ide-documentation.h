@@ -19,7 +19,6 @@
 #ifndef IDE_DOCUMENTATION_H
 #define IDE_DOCUMENTATION_H
 
-#include "ide-source-view.h"
 #include "ide-object.h"
 
 G_BEGIN_DECLS
