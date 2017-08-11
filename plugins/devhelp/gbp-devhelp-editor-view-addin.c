@@ -21,7 +21,6 @@
 #include <libxml/xmlreader.h>
 
 #include "gbp-devhelp-editor-view-addin.h"
-#include "gbp-devhelp-panel.h"
 
 struct _GbpDevhelpEditorViewAddin
 {

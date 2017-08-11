@@ -1,6 +1,6 @@
-/* gbp-devhelp-panel.h
+/* gbp-devhelp-editor-addin.h
  *
- * Copyright (C) 2015 Christian Hergert <chergert@redhat.com>
+ * Copyright (C) 2017 Christian Hergert <chergert@redhat.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,22 +16,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef GBP_DEVHELP_PANEL_H
-#define GBP_DEVHELP_PANEL_H
+#pragma once
 
-#include <dazzle.h>
+#include <ide.h>
 
 G_BEGIN_DECLS
 
-#define GBP_TYPE_DEVHELP_PANEL (gbp_devhelp_panel_get_type())
+#define GBP_TYPE_DEVHELP_EDITOR_ADDIN (gbp_devhelp_editor_addin_get_type())
 
-G_DECLARE_FINAL_TYPE (GbpDevhelpPanel, gbp_devhelp_panel, GBP, DEVHELP_PANEL, DzlDockWidget)
-
-void gbp_devhelp_panel_set_uri      (GbpDevhelpPanel *self,
-                                     const gchar     *uri);
-void gbp_devhelp_panel_focus_search (GbpDevhelpPanel *self,
-                                     const gchar     *keyword);
+G_DECLARE_FINAL_TYPE (GbpDevhelpEditorAddin, gbp_devhelp_editor_addin, GBP, DEVHELP_EDITOR_ADDIN, GObject)
 
 G_END_DECLS
-
-#endif /* GBP_DEVHELP_PANEL_H */

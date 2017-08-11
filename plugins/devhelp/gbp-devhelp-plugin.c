@@ -19,6 +19,7 @@
 #include <ide.h>
 #include <libpeas/peas.h>
 
+#include "gbp-devhelp-editor-addin.h"
 #include "gbp-devhelp-editor-view-addin.h"
 #include "gbp-devhelp-documentation-provider.h"
 #include "gbp-devhelp-layout-stack-addin.h"
@@ -26,6 +27,9 @@
 void
 peas_register_types (PeasObjectModule *module)
 {
+  peas_object_module_register_extension_type (module,
+                                              IDE_TYPE_EDITOR_ADDIN,
+                                              GBP_TYPE_DEVHELP_EDITOR_ADDIN);
   peas_object_module_register_extension_type (module,
                                               IDE_TYPE_EDITOR_VIEW_ADDIN,
                                               GBP_TYPE_DEVHELP_EDITOR_VIEW_ADDIN);
