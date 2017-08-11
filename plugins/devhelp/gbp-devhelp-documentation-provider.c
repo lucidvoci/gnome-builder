@@ -291,13 +291,13 @@ gbp_devhelp_documentation_provider_class_init (GbpDevhelpDocumentationProviderCl
   regexes[INFORMAL_EXAMPLE_END] = g_regex_new ("</div>", 0, 0, NULL);
   regexes[CLEAN_UP] = g_regex_new ("</?[acdehlpsu].*?>|</?td.*?>|</?ta.*?>|</?tb.*?>", 0, 0, NULL);
 
-  #ifdef IDE_ENABLE_TRACE
+#ifdef IDE_ENABLE_TRACE
   for (guint i = 0; i < N_REGEXES; i++)
     {
       if (regexes[i] == NULL)
         g_error ("Failed to create regex %d", i);
     }
-  #endif
+#endif
 }
 
 static void
