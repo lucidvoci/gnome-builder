@@ -24,6 +24,8 @@
 #include "gbp-documentation-card.h"
 
 #define POPUP_TIMEOUT          1
+#define POPDOWN_TIMEOUT        500
+#define SPACE_TOLERANCE        15
 
 struct _GbpDocumentationCardViewAddin
 {
@@ -36,6 +38,7 @@ struct _GbpDocumentationCardViewAddin
   guint                 timeout_id;
   gint                  motion_handler_id;
   guint                 poped_up : 1;
+  guint                 last_x, last_y;
 };
 
 static void iface_init (IdeEditorViewAddinInterface *iface);
@@ -43,6 +46,16 @@ static void iface_init (IdeEditorViewAddinInterface *iface);
 G_DEFINE_TYPE_EXTENDED (GbpDocumentationCardViewAddin, gbp_documentation_card_view_addin, G_TYPE_OBJECT, 0,
                         G_IMPLEMENT_INTERFACE (IDE_TYPE_EDITOR_VIEW_ADDIN, iface_init))
 
+static gboolean
+within_space (GbpDocumentationCardViewAddin *self,
+              guint                          x,
+              guint                          y)
+{
+  return (x <= self->last_x + SPACE_TOLERANCE &&
+      x >= self->last_x - SPACE_TOLERANCE &&
+      y <= self->last_y + SPACE_TOLERANCE &&
+      y >= self->last_y - SPACE_TOLERANCE);
+}
 static gboolean
 search_document_cb (gpointer data)
 {
@@ -61,9 +74,27 @@ search_document_cb (gpointer data)
   GtkTextIter begin;
   GtkTextIter end;
 
-  IdeDocumentationInfo *info;
+  g_autoptr(IdeDocumentationInfo) info = NULL;
   g_autofree gchar *selected_text = NULL;
   gint x, y;
+
+  window = gtk_widget_get_parent_window (GTK_WIDGET (self->editor_view));
+  display = gdk_window_get_display (window);
+  device = gdk_seat_get_pointer (gdk_display_get_default_seat (display));
+
+  gdk_window_get_device_position (window, device, &x, &y, NULL);
+
+  if (self->poped_up)
+    {
+      if (within_space (self, x, y))
+        return FALSE;
+      self->poped_up = FALSE;
+      gbp_documentation_card_popdown (self->popover);
+      return FALSE;
+    }
+
+  self->last_x = x;
+  self->last_y = y;
 
   self->timeout_id = 0;
   source_view = ide_editor_view_get_view (self->editor_view);
@@ -86,11 +117,6 @@ search_document_cb (gpointer data)
   else
     return FALSE;
 
-  window = gtk_widget_get_parent_window (GTK_WIDGET (self->editor_view));
-  display = gdk_window_get_display (window);
-  device = gdk_seat_get_pointer (gdk_display_get_default_seat (display));
-
-  gdk_window_get_device_position (window, device, &x, &y, NULL);
   gtk_text_view_window_to_buffer_coords (GTK_TEXT_VIEW (source_view), GTK_TEXT_WINDOW_WIDGET, x, y, &x, &y);
   gtk_text_view_get_iter_at_location (GTK_TEXT_VIEW (source_view), &end, x, y);
   gtk_text_view_get_iter_at_location (GTK_TEXT_VIEW (source_view), &begin, x, y);
@@ -116,10 +142,14 @@ search_document_cb (gpointer data)
       g_free (self->previous_text);
       self->previous_text = g_steal_pointer (&selected_text);
     }
+
   gbp_documentation_card_popup (self->popover);
   self->poped_up = TRUE;
+
   return FALSE;
 }
+
+
 
 static gboolean
 motion_notify_event_cb (gpointer data)
@@ -136,10 +166,7 @@ motion_notify_event_cb (gpointer data)
                                                   g_object_ref (self),
                                                   g_object_unref);
   else
-    {
-      gbp_documentation_card_popdown (self->popover);
-      self->poped_up = FALSE;
-    }
+    search_document_cb (g_object_ref (self));
 
   return FALSE;
 }
