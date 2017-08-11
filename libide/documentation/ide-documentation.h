@@ -19,7 +19,9 @@
 #ifndef IDE_DOCUMENTATION_H
 #define IDE_DOCUMENTATION_H
 
-#include "ide-object.h"
+#include <gtksourceview/gtksource.h>
+
+#include "ide-documentation-info.h"
 
 G_BEGIN_DECLS
 
@@ -29,25 +31,6 @@ G_DECLARE_FINAL_TYPE (IdeDocumentation,
                       ide_documentation,
                       IDE, DOCUMENTATION,
                       IdeObject)
-typedef enum {
-  NO_CONTEXT,
-  CARD_C,
-} IdeDocumentationContext;
-
-typedef struct
-{
-  gchar                   *input;
-  IdeDocumentationContext  context;
-  GList                   *proposals;
-} IdeDocumentationInfo;
-
-typedef struct
-{
-  gchar       *header;
-  gchar       *text;
-  const gchar *book_name;
-  gchar       *uri;
-} IdeDocumentationInfoCard;
 
 IdeDocumentationInfo    *ide_documentation_get_info    (IdeDocumentation        *self,
                                                         gchar                   *input,

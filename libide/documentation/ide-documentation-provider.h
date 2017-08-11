@@ -21,14 +21,11 @@
 
 #include <gtksourceview/gtksource.h>
 
-#include "ide-types.h"
-#include "ide-object.h"
-#include "ide-documentation.h"
+#include "ide-documentation-info.h"
 
 G_BEGIN_DECLS
 
 #define IDE_TYPE_DOCUMENTATION_PROVIDER             (ide_documentation_provider_get_type())
-#define IDE_DOCUMENTATION_PROVIDER_GET_INTERFACE(o) (G_TYPE_INSTANCE_GET_INTERFACE((o), IDE_TYPE_DOCUMENTATION_PROVIDER, IdeDocumentationProviderInterface))
 
 G_DECLARE_INTERFACE (IdeDocumentationProvider, ide_documentation_provider, IDE, DOCUMENTATION_PROVIDER, IdeObject)
 
@@ -38,7 +35,7 @@ struct _IdeDocumentationProviderInterface
 
   void                    (*get_info)        (IdeDocumentationProvider    *self,
                                               IdeDocumentationInfo        *info);
-  gchar		               *(*get_name)        (IdeDocumentationProvider    *self);
+  gchar                  *(*get_name)        (IdeDocumentationProvider    *self);
   IdeDocumentationContext (*get_context)     (IdeDocumentationProvider    *self);
 };
 

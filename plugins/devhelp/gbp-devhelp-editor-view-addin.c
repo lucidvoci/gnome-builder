@@ -18,7 +18,6 @@
 
 #define G_LOG_DOMAIN "gbp-devhelp-editor-view-addin"
 
-#include <devhelp/devhelp.h>
 #include <libxml/xmlreader.h>
 
 #include "gbp-devhelp-editor-view-addin.h"
@@ -46,8 +45,6 @@ static void
 gbp_devhelp_editor_view_addin_load (IdeEditorViewAddin *addin,
                                     IdeEditorView      *view)
 {
-  GbpDevhelpEditorViewAddin *self;
-
   g_assert (GBP_IS_DEVHELP_EDITOR_VIEW_ADDIN (addin));
   g_assert (IDE_IS_EDITOR_VIEW (view));
 

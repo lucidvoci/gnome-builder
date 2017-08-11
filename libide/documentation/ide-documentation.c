@@ -21,6 +21,7 @@
 
 #include "ide-documentation.h"
 #include "ide-documentation-provider.h"
+#include "ide-documentation-proposal.h"
 
 struct _IdeDocumentation
 {
@@ -49,10 +50,8 @@ ide_documentation_search_foreach (PeasExtensionSet *set,
   IdeDocumentationProvider *provider = (IdeDocumentationProvider *) exten;
   IdeDocumentationInfo *info = user_data;
 
-  if (ide_documentation_provider_get_context (provider) != info->context)
-    return;
-
-  ide_documentation_provider_get_info (provider, info);
+  if (ide_documentation_provider_get_context (provider) == ide_documentation_info_get_context (info))
+    ide_documentation_provider_get_info (provider, info);
 }
 
 static void
@@ -87,6 +86,16 @@ ide_documentation_init (IdeDocumentation *self)
 {
 }
 
+/**
+ * ide_documentation_get_info:
+ * @self: An #IdeDocumentation
+ * @input: the search keyword
+ * @context: the context for the request
+ *
+ * Requests documentation for the keyword.
+ *
+ * Returns: (transfer full): An #IdeDocumentationInfo
+ */
 IdeDocumentationInfo *
 ide_documentation_get_info    (IdeDocumentation        *self,
                                gchar                   *input,
@@ -95,14 +104,12 @@ ide_documentation_get_info    (IdeDocumentation        *self,
   IdeDocumentationInfo *info;
 
   g_assert (IDE_IS_DOCUMENTATION (self));
+  g_return_val_if_fail (input != NULL, NULL);
 
-  info = g_slice_new0 (IdeDocumentationInfo);
-  info->input = input;
-  info->context = context;
+  info = ide_documentation_info_new (input, context);
 
   peas_extension_set_foreach (self->extensions,
                               ide_documentation_search_foreach,
                               info);
   return info;
-
 }

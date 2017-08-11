@@ -19,8 +19,6 @@
 #define G_LOG_DOMAIN "ide-documentation-provider"
 
 #include "ide-documentation-provider.h"
-#include "ide-documentation.h"
-#include "ide-context.h"
 
 G_DEFINE_INTERFACE (IdeDocumentationProvider, ide_documentation_provider, IDE_TYPE_OBJECT)
 
@@ -34,9 +32,8 @@ ide_documentation_provider_get_info (IdeDocumentationProvider *provider,
                                      IdeDocumentationInfo     *info)
 {
   g_return_if_fail (IDE_IS_DOCUMENTATION_PROVIDER (provider));
-  g_return_if_fail (info->input != NULL);
 
-  return IDE_DOCUMENTATION_PROVIDER_GET_INTERFACE (provider)->get_info (provider, info);
+  return IDE_DOCUMENTATION_PROVIDER_GET_IFACE (provider)->get_info (provider, info);
 }
 
 gchar *
@@ -44,13 +41,13 @@ ide_documentation_provider_get_name (IdeDocumentationProvider *provider)
 {
   g_return_val_if_fail (IDE_IS_DOCUMENTATION_PROVIDER (provider), NULL);
 
-  return IDE_DOCUMENTATION_PROVIDER_GET_INTERFACE (provider)->get_name (provider);
+  return IDE_DOCUMENTATION_PROVIDER_GET_IFACE (provider)->get_name (provider);
 }
 
 IdeDocumentationContext
 ide_documentation_provider_get_context (IdeDocumentationProvider *provider)
 {
-  g_return_val_if_fail (IDE_IS_DOCUMENTATION_PROVIDER (provider), NO_CONTEXT);
+  g_return_val_if_fail (IDE_IS_DOCUMENTATION_PROVIDER (provider), IDE_DOCUMENTATION_CONTEXT_NON);
 
-  return IDE_DOCUMENTATION_PROVIDER_GET_INTERFACE (provider)->get_context (provider);
+  return IDE_DOCUMENTATION_PROVIDER_GET_IFACE (provider)->get_context (provider);
 }

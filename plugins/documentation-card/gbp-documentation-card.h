@@ -27,7 +27,7 @@ G_BEGIN_DECLS
 
 G_DECLARE_FINAL_TYPE (GbpDocumentationCard, gbp_documentation_card, GBP, DOCUMENTATION_CARD, GtkPopover)
 
-void gbp_documentation_card_set_text (GbpDocumentationCard *self,
+void gbp_documentation_card_set_info (GbpDocumentationCard *self,
                                       IdeDocumentationInfo *info);
 void gbp_documentation_card_popup    (GbpDocumentationCard *self);
 void gbp_documentation_card_popdown  (GbpDocumentationCard *self);

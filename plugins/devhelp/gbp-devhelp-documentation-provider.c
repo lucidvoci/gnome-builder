@@ -25,12 +25,13 @@
 
 struct _GbpDevhelpDocumentationProvider
 {
-  GObject                  parent_instance;
+  GObject                       parent_instance;
 
-  IdeDocumentation         *documentation;
-  IdeDocumentationContext   context;
-  IdeDocumentationInfoCard *card;
-  DhKeywordModel           *keyword_model;
+  IdeDocumentation             *documentation;
+  IdeDocumentationContext       context;
+  IdeDocumentationProposal     *proposal;
+  DhKeywordModel               *keyword_model;
+  gchar                        *uri;
 
 };
 
@@ -68,38 +69,10 @@ enum
 
 static GRegex *regexes [N_REGEXES];
 
-static IdeDocumentationInfoCard*
-card_create ()
-{
-  IdeDocumentationInfoCard *init_card;
-
-  init_card = g_slice_new0 (IdeDocumentationInfoCard);
-
-  init_card->header = NULL;
-  init_card->text = NULL;
-  init_card->book_name = "";
-  init_card->uri = NULL;
-
-  return init_card;
-}
-
-static void
-card_free (IdeDocumentationInfoCard *card)
-{
-  if (card == NULL)
-    return;
-
-  g_clear_pointer (&card->header, g_free);
-  g_clear_pointer (&card->text, g_free);
-  g_clear_pointer (&card->uri, g_free);
-
-  g_slice_free (IdeDocumentationInfoCard, card);
-}
-
 static gchar*
 regex_replace_line (GRegex      *regex,
                     gchar       *line,
-                    gchar       *replace)
+                    const gchar *replace)
 {
   gchar *tmp_line;
 
@@ -116,19 +89,18 @@ xml_parse (GbpDevhelpDocumentationProvider *self,
 {
   GFileInputStream *file_stream;
   GDataInputStream *data_stream;
-  GString *header = g_string_new (NULL);
-  GString *text = g_string_new (NULL);
-  GError *error = NULL;
-  GMatchInfo *match_info;
+  g_autoptr(GString) header = g_string_new (NULL);
+  g_autoptr(GString) text = g_string_new (NULL);
+  g_autoptr(GError) error_file = NULL;
+  g_autoptr(GError) error_stream = NULL;
   GRegex *start_text;
 
   const gchar *regex_char;
-  gchar *line;
   gboolean informal_example_bool = FALSE;
   gboolean found_tag = FALSE;
   gboolean text_tag = FALSE;
 
-  file_stream = g_file_read (g_file_new_for_uri (file_name), NULL, &error);
+  file_stream = g_file_read (g_file_new_for_uri (file_name), NULL, &error_file);
   if (file_stream == NULL)
     return FALSE;
 
@@ -139,12 +111,13 @@ xml_parse (GbpDevhelpDocumentationProvider *self,
 
   while (TRUE)
     {
-      line = g_data_input_stream_read_line_utf8 (data_stream, NULL, NULL, &error);
-      if (error != NULL || line == NULL)
+      g_autofree gchar *line = NULL;
+      line = g_data_input_stream_read_line_utf8 (data_stream, NULL, NULL, &error_stream);
+      if (line == NULL)
         return FALSE;
       if (!found_tag)
         {
-          if (g_regex_match (start_text, line, 0, &match_info))
+          if (g_regex_match (start_text, line, 0, NULL))
             found_tag = TRUE;
         }
       if (found_tag && !text_tag)
@@ -155,10 +128,10 @@ xml_parse (GbpDevhelpDocumentationProvider *self,
           line = regex_replace_line (regexes[MAKE_BOLD_END], line, "</b>");
           line = regex_replace_line (regexes[NEW_LINE], line, "\n");
 
-          if (g_regex_match (regexes[REMOVE_MULTI_SPACES], line, 0, &match_info))
+          if (g_regex_match (regexes[REMOVE_MULTI_SPACES], line, 0, NULL))
             continue;
 
-          if (g_regex_match (regexes[END_HEADER], line, 0, &match_info))
+          if (g_regex_match (regexes[END_HEADER], line, 0, NULL))
             {
               line = regex_replace_line (regexes[END_HEADER], line, "</tt>");
               g_string_append (header, line);
@@ -170,12 +143,12 @@ xml_parse (GbpDevhelpDocumentationProvider *self,
         }
       if (text_tag)
         {
-          if (g_regex_match (regexes[INFORMAL_EXAMPLE], line, 0, &match_info))
+          if (g_regex_match (regexes[INFORMAL_EXAMPLE], line, 0, NULL))
             {
               informal_example_bool = TRUE;
               continue;
             }
-          if (g_regex_match (regexes[INFORMAL_EXAMPLE_END], line, 0, &match_info))
+          if (g_regex_match (regexes[INFORMAL_EXAMPLE_END], line, 0, NULL))
             {
               informal_example_bool = FALSE;
               continue;
@@ -188,12 +161,12 @@ xml_parse (GbpDevhelpDocumentationProvider *self,
           line = regex_replace_line (regexes[MAKE_BOLD_END_NEW_LINE], line, "</b>\n");
           line = regex_replace_line (regexes[MAKE_POINT_NEW_LINE], line, " - ");
 
-          if (g_regex_match (regexes[REMOVE_MULTI_SPACES], line, 0, &match_info))
+          if (g_regex_match (regexes[REMOVE_MULTI_SPACES], line, 0, NULL))
             continue;
 
           line = regex_replace_line (regexes[NEW_LINE], line, "\n");
 
-          if (g_regex_match (regexes[END_TEXT], line, 0, &match_info))
+          if (g_regex_match (regexes[END_TEXT], line, 0, NULL))
             break;
 
           line = regex_replace_line (regexes[CLEAN_UP], line, "\n");
@@ -205,9 +178,9 @@ xml_parse (GbpDevhelpDocumentationProvider *self,
         }
     }
 
-  self->card->header = g_string_free (header, FALSE);
-  self->card->text = g_string_free (text, FALSE);
-
+  self->proposal = ide_documentation_proposal_new (self->uri);
+  ide_documentation_proposal_set_header (self->proposal, g_string_free (g_steal_pointer (&header), FALSE));
+  ide_documentation_proposal_set_text (self->proposal, g_string_free (g_steal_pointer (&text), FALSE));
   return TRUE;
 }
 
@@ -217,15 +190,15 @@ get_devhelp_book (GbpDevhelpDocumentationProvider *self,
 {
   DhLink *link;
 
-  if (info->input == NULL)
+  if (ide_documentation_info_get_input (info) == NULL)
     return FALSE;
 
-  link = dh_keyword_model_filter (self->keyword_model, info->input, NULL, NULL);
+  link = dh_keyword_model_filter (self->keyword_model, ide_documentation_info_get_input (info), NULL, NULL);
   if (link == NULL)
     return FALSE;
 
-  self->card->uri = dh_link_get_uri (link);
-  self->card->book_name = dh_link_get_book_name (link);
+  self->uri = dh_link_get_uri (link);
+
   return TRUE;
 }
 
@@ -240,7 +213,7 @@ start_get_info (IdeDocumentationProvider *provider,
                 IdeDocumentationInfo     *info)
 {
   GbpDevhelpDocumentationProvider *self = (GbpDevhelpDocumentationProvider *)provider;
-  gchar **tokens;
+  g_auto(GStrv) tokens = NULL;
   gboolean parse_succ;
 
   g_assert (GBP_IS_DEVHELP_DOCUMENTATION_PROVIDER (self));
@@ -248,17 +221,12 @@ start_get_info (IdeDocumentationProvider *provider,
   if (!get_devhelp_book (self, info))
     return FALSE;
 
-  tokens = g_strsplit (self->card->uri, "#", -1 );
-  if (tokens == NULL)
+  tokens = g_strsplit (self->uri, "#", -1 );
+  if (tokens == NULL || g_strv_length (tokens) != 2)
     return FALSE;
-  if (g_strv_length (tokens) != 2)
-    {
-      g_strfreev (tokens);
-      return FALSE;
-    }
 
   parse_succ = xml_parse (self, tokens[0], tokens[1], info);
-  g_strfreev (tokens);
+  g_free (self->uri);
 
   return parse_succ;
 }
@@ -272,14 +240,10 @@ gbp_devhelp_documentation_provider_get_info (IdeDocumentationProvider *provider,
 
   g_assert (GBP_IS_DEVHELP_DOCUMENTATION_PROVIDER (self));
 
-  self->card = card_create ();
-
   parse_succ = start_get_info (provider, info);
 
   if (parse_succ)
-    info->proposals = g_list_append (info->proposals, self->card);
-  else
-    card_free (self->card);
+    ide_documentation_info_take_proposal (info, self->proposal);
 }
 
 IdeDocumentationContext
@@ -299,7 +263,7 @@ gbp_devhelp_documentation_provider_constructed (GObject *object)
   context = ide_object_get_context (IDE_OBJECT (self));
   self->documentation = ide_context_get_documentation (context);
   self->keyword_model = dh_keyword_model_new ();
-  self->context = CARD_C;
+  self->context = IDE_DOCUMENTATION_CONTEXT_CARD_C;
 }
 
 static void
@@ -326,6 +290,14 @@ gbp_devhelp_documentation_provider_class_init (GbpDevhelpDocumentationProviderCl
   regexes[INFORMAL_EXAMPLE] = g_regex_new ("<div class=\"informalexample\">", 0, 0, NULL);
   regexes[INFORMAL_EXAMPLE_END] = g_regex_new ("</div>", 0, 0, NULL);
   regexes[CLEAN_UP] = g_regex_new ("</?[acdehlpsu].*?>|</?td.*?>|</?ta.*?>|</?tb.*?>", 0, 0, NULL);
+
+  #ifdef IDE_ENABLE_TRACE
+  for (guint i = 0; i < N_REGEXES; i++)
+    {
+      if (regexes[i] == NULL)
+        g_error ("Failed to create regex %d", i);
+    }
+  #endif
 }
 
 static void

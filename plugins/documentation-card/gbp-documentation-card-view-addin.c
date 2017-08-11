@@ -23,13 +23,19 @@
 #include "gbp-documentation-card-view-addin.h"
 #include "gbp-documentation-card.h"
 
+#define POPUP_TIMEOUT          1
+
 struct _GbpDocumentationCardViewAddin
 {
-  GObject         parent_instance;
+  GObject               parent_instance;
 
   IdeEditorView        *editor_view;
   GbpDocumentationCard *popover;
   gchar                *previous_text;
+
+  guint                 timeout_id;
+  gint                  motion_handler_id;
+  guint                 poped_up : 1;
 };
 
 static void iface_init (IdeEditorViewAddinInterface *iface);
@@ -38,7 +44,7 @@ G_DEFINE_TYPE_EXTENDED (GbpDocumentationCardViewAddin, gbp_documentation_card_vi
                         G_IMPLEMENT_INTERFACE (IDE_TYPE_EDITOR_VIEW_ADDIN, iface_init))
 
 static gboolean
-motion_notify_event_cb (gpointer data)
+search_document_cb (gpointer data)
 {
   GbpDocumentationCardViewAddin *self = GBP_DOCUMENTATION_CARD_VIEW_ADDIN  (data);
   IdeBuffer *buffer;
@@ -56,11 +62,12 @@ motion_notify_event_cb (gpointer data)
   GtkTextIter end;
 
   IdeDocumentationInfo *info;
-  gchar *selected_text;
+  g_autofree gchar *selected_text = NULL;
   gint x, y;
 
+  self->timeout_id = 0;
   source_view = ide_editor_view_get_view (self->editor_view);
-  if (source_view == NULL || !GTK_SOURCE_IS_VIEW (source_view))
+  if (!GTK_SOURCE_IS_VIEW (source_view))
     return FALSE;
 
   buffer = ide_editor_view_get_buffer (self->editor_view);
@@ -75,7 +82,7 @@ motion_notify_event_cb (gpointer data)
     return FALSE;
 
   if (ide_str_equal0 (gtk_source_language_get_id(lang), "c"))
-    doc_context = CARD_C;
+    doc_context = IDE_DOCUMENTATION_CONTEXT_CARD_C;
   else
     return FALSE;
 
@@ -89,27 +96,51 @@ motion_notify_event_cb (gpointer data)
   gtk_text_view_get_iter_at_location (GTK_TEXT_VIEW (source_view), &begin, x, y);
 
   while (g_unichar_islower (gtk_text_iter_get_char (&begin)) || g_unichar_isdigit(gtk_text_iter_get_char (&begin)) || gtk_text_iter_get_char (&begin) == '_')
-    gtk_text_iter_backward_char (&begin);
+    if (!gtk_text_iter_backward_char (&begin))
+      break;
   gtk_text_iter_forward_char (&begin);
 
   while (g_unichar_islower (gtk_text_iter_get_char (&end)) || g_unichar_isdigit (gtk_text_iter_get_char (&end)) || gtk_text_iter_get_char (&end) == '_')
-    gtk_text_iter_forward_char (&end);
+    if (!gtk_text_iter_forward_char (&end))
+      break;
 
   selected_text = gtk_text_buffer_get_text (GTK_TEXT_BUFFER (buffer), &begin, &end, FALSE);
 
-  if (!g_strcmp0 (selected_text, self->previous_text) == 0)
+  if (g_strcmp0 (selected_text, self->previous_text) != 0)
     {
       info = ide_documentation_get_info (doc, selected_text, doc_context);
-      if (g_list_length (info->proposals) == 0)
-        {
-          gbp_documentation_card_popdown (self->popover);
-          return FALSE;
-        }
-      gbp_documentation_card_set_text (self->popover, info);
+      if (ide_documentation_info_get_size (info) == 0)
+        return FALSE;
+
+      gbp_documentation_card_set_info (self->popover, info);
       g_free (self->previous_text);
-      self->previous_text = selected_text;
+      self->previous_text = g_steal_pointer (&selected_text);
     }
   gbp_documentation_card_popup (self->popover);
+  self->poped_up = TRUE;
+  return FALSE;
+}
+
+static gboolean
+motion_notify_event_cb (gpointer data)
+{
+  GbpDocumentationCardViewAddin *self = GBP_DOCUMENTATION_CARD_VIEW_ADDIN  (data);
+
+  ide_clear_source (&self->timeout_id);
+
+  if (!self->poped_up)
+    self->timeout_id =
+            gdk_threads_add_timeout_seconds_full (G_PRIORITY_LOW,
+                                                  POPUP_TIMEOUT,
+                                                  search_document_cb,
+                                                  g_object_ref (self),
+                                                  g_object_unref);
+  else
+    {
+      gbp_documentation_card_popdown (self->popover);
+      self->poped_up = FALSE;
+    }
+
   return FALSE;
 }
 
@@ -125,17 +156,38 @@ gbp_documentation_card_view_addin_load (IdeEditorViewAddin *addin,
   self = GBP_DOCUMENTATION_CARD_VIEW_ADDIN (addin);
   self->editor_view = view;
   self->popover = g_object_new (GBP_TYPE_DOCUMENTATION_CARD,
-                                "relative-to", GTK_WIDGET (view),
+                                "relative-to", view,
                                 "position", GTK_POS_TOP,
                                 "modal", FALSE,
                                  NULL);
+  self->motion_handler_id =
+    g_signal_connect_object (view,
+                            "motion-notify-event",
+                            G_CALLBACK (motion_notify_event_cb),
+                            self,
+                            G_CONNECT_SWAPPED);
 
-  g_signal_connect_object (view,
-                           "motion-notify-event",
-                           G_CALLBACK (motion_notify_event_cb),
-                           self,
-                           G_CONNECT_SWAPPED);
+}
 
+static void
+gbp_documentation_card_view_addin_unload (IdeEditorViewAddin *addin,
+                                          IdeEditorView      *view)
+{
+  GbpDocumentationCardViewAddin *self;
+
+  g_assert (GBP_IS_DOCUMENTATION_CARD_VIEW_ADDIN (addin));
+  g_assert (IDE_IS_EDITOR_VIEW (view));
+
+  self = GBP_DOCUMENTATION_CARD_VIEW_ADDIN (addin);
+
+  g_free (self->previous_text);
+  ide_clear_source (&self->timeout_id);
+
+  if (self->motion_handler_id)
+    {
+      g_signal_handler_disconnect (self->editor_view, self->motion_handler_id);
+      self->motion_handler_id = 0;
+    }
 }
 
 static void
@@ -152,4 +204,5 @@ static void
 iface_init (IdeEditorViewAddinInterface *iface)
 {
   iface->load = gbp_documentation_card_view_addin_load;
+  iface->unload = gbp_documentation_card_view_addin_unload;
 }

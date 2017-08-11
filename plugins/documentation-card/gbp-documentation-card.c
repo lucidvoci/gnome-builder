@@ -23,7 +23,6 @@
 
 #include "gbp-documentation-card.h"
 
-#define HOVER_TIMEOUT          1000
 #define CARD_WIDTH             80
 
 struct _GbpDocumentationCard
@@ -40,9 +39,6 @@ struct _GbpDocumentationCard
   GtkLabel     *text;
 
   gchar        *uri;
-  guint         timeout_id;
-  gint          last_x;
-  gint          last_y;
 };
 
 G_DEFINE_TYPE (GbpDocumentationCard, gbp_documentation_card, GTK_TYPE_POPOVER)
@@ -51,23 +47,12 @@ static gboolean
 card_popup (gpointer data)
 {
   GbpDocumentationCard *self = GBP_DOCUMENTATION_CARD (data);
+
   GdkRectangle rec = {1, 1, 1, 1};
-  gint x, y;
 
-  if (self->timeout_id)
-    {
-      g_source_remove (self->timeout_id);
-      self->timeout_id = 0;
-    }
-
-  gdk_window_get_device_position (self->window, self->pointer, &x, &y, NULL);
-  if (x == self->last_x && y == self->last_y)
-    {
-      rec.x = x;
-      rec.y = y;
-      gtk_popover_set_pointing_to (GTK_POPOVER (self), &rec);
-      gtk_popover_popup (GTK_POPOVER (self));
-    }
+  gdk_window_get_device_position (self->window, self->pointer, &rec.x, &rec.y, NULL);
+  gtk_popover_set_pointing_to (GTK_POPOVER (self), &rec);
+  gtk_popover_popup (GTK_POPOVER (self));
 
   return FALSE;
 }
@@ -88,16 +73,17 @@ card_popdown (gpointer data)
 
 static void
 gbp_documentation_card__button_clicked (GbpDocumentationCard *self,
-                                        GtkButton                   *button)
+                                        GtkButton            *button)
 {
   g_assert (GBP_IS_DOCUMENTATION_CARD (self));
   g_assert (GTK_IS_BUTTON (button));
 
+  gtk_widget_set_visible (GTK_WIDGET (self->text), TRUE);
+  gtk_widget_set_visible (GTK_WIDGET (self->button), FALSE);
+
   gtk_popover_set_modal (GTK_POPOVER (self), TRUE);
   gtk_label_set_width_chars (self->text, CARD_WIDTH);
 
-  gtk_widget_set_visible (GTK_WIDGET (self->text), TRUE);
-  gtk_widget_set_visible (GTK_WIDGET (self->button), FALSE);
 }
 
 static void
@@ -118,26 +104,26 @@ gbp_documentation_card_init (GbpDocumentationCard *self)
 
   gtk_widget_init_template (GTK_WIDGET (self));
 
-  self->timeout_id = 0;
-
   g_signal_connect_object (self->button,
                            "clicked",
                            G_CALLBACK (gbp_documentation_card__button_clicked),
                            self,
                            G_CONNECT_SWAPPED);
-
 }
 
 void
-gbp_documentation_card_set_text (GbpDocumentationCard *self,
+gbp_documentation_card_set_info (GbpDocumentationCard *self,
                                  IdeDocumentationInfo *info)
 {
-  IdeDocumentationInfoCard *card;
+  IdeDocumentationProposal *proposal;
 
-  card = (g_list_first (info->proposals))->data;
+  g_assert (GBP_IS_DOCUMENTATION_CARD (self));
+  g_assert (IDE_IS_DOCUMENTATION_INFO (info));
 
-  gtk_label_set_markup (self->text, card->text);
-  gtk_label_set_markup (self->header, card->header);
+  proposal = ide_documentation_info_get_proposal (info, 0);
+
+  gtk_label_set_markup (self->text, ide_documentation_proposal_get_text (proposal));
+  gtk_label_set_markup (self->header, ide_documentation_proposal_get_header (proposal));
 }
 
 void
@@ -145,24 +131,20 @@ gbp_documentation_card_popup (GbpDocumentationCard *self)
 {
   GdkDisplay *display;
 
-  g_assert (GBP_IS_DOCUMENTATION_CARD (self));
+  g_return_if_fail (GBP_IS_DOCUMENTATION_CARD (self));
 
   self->window = gtk_widget_get_parent_window (gtk_popover_get_relative_to (GTK_POPOVER (self)));
   display = gdk_window_get_display (self->window);
   self->pointer = gdk_seat_get_pointer (gdk_display_get_default_seat (display));
-  gdk_window_get_device_position (self->window, self->pointer, &self->last_x, &self->last_y, NULL);
 
-  if (self->timeout_id)
-    g_source_remove (self->timeout_id);
-
-  self->timeout_id = gdk_threads_add_timeout (HOVER_TIMEOUT,
-					                                    card_popup,
-					                                    g_object_ref (self));
+  card_popup (g_object_ref (self));
 }
 
 void
 gbp_documentation_card_popdown (GbpDocumentationCard *self)
 {
+  g_return_if_fail (GBP_IS_DOCUMENTATION_CARD (self));
+
   card_popdown (g_object_ref (self));
 }
 

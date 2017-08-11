@@ -72,7 +72,7 @@ struct _IdeContext
   IdeDiagnosticsManager    *diagnostics_manager;
   IdeDeviceManager         *device_manager;
   IdeDoap                  *doap;
-  IdeDocumentation            *documentation;
+  IdeDocumentation         *documentation;
   GtkRecentManager         *recent_manager;
   IdeRunManager            *run_manager;
   IdeRuntimeManager        *runtime_manager;
@@ -230,7 +230,7 @@ ide_context_get_device_manager (IdeContext *self)
 }
 
 /**
- * ide_xontext_get_documentation:
+ * ide_context_get_documentation:
  * @self: An #IdeContext.
  *
  * Returns the #IdeDocumentation for the source view if there is one.

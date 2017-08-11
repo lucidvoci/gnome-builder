@@ -23,8 +23,6 @@
 
 G_BEGIN_DECLS
 
-//#define GBP_DEVHELP_DOCUMENTATION_PROVIDER_PRIORITY 200
-
 #define GBP_TYPE_DEVHELP_DOCUMENTATION_PROVIDER (gbp_devhelp_documentation_provider_get_type())
 
 G_DECLARE_FINAL_TYPE (GbpDevhelpDocumentationProvider, gbp_devhelp_documentation_provider, GBP, DEVHELP_DOCUMENTATION_PROVIDER, IdeObject)
