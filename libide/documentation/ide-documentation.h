@@ -33,7 +33,7 @@ G_DECLARE_FINAL_TYPE (IdeDocumentation,
                       IdeObject)
 
 IdeDocumentationInfo    *ide_documentation_get_info    (IdeDocumentation        *self,
-                                                        gchar                   *input,
+                                                        const gchar             *input,
                                                         IdeDocumentationContext  context);
 
 G_END_DECLS

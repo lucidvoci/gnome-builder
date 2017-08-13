@@ -179,8 +179,12 @@ xml_parse (GbpDevhelpDocumentationProvider *self,
     }
 
   self->proposal = ide_documentation_proposal_new (self->uri);
-  ide_documentation_proposal_set_header (self->proposal, g_string_free (g_steal_pointer (&header), FALSE));
-  ide_documentation_proposal_set_text (self->proposal, g_string_free (g_steal_pointer (&text), FALSE));
+  ide_documentation_proposal_set_header (self->proposal, header->str);
+  ide_documentation_proposal_set_text (self->proposal, text->str);
+
+  g_string_free (g_steal_pointer (&header), TRUE);
+  g_string_free (g_steal_pointer (&text), TRUE);
+
   return TRUE;
 }
 
@@ -197,6 +201,7 @@ get_devhelp_book (GbpDevhelpDocumentationProvider *self,
   if (link == NULL)
     return FALSE;
 
+  g_free (self->uri);
   self->uri = dh_link_get_uri (link);
 
   return TRUE;
@@ -214,7 +219,6 @@ start_get_info (IdeDocumentationProvider *provider,
 {
   GbpDevhelpDocumentationProvider *self = (GbpDevhelpDocumentationProvider *)provider;
   g_auto(GStrv) tokens = NULL;
-  gboolean parse_succ;
 
   g_assert (GBP_IS_DEVHELP_DOCUMENTATION_PROVIDER (self));
 
@@ -222,13 +226,12 @@ start_get_info (IdeDocumentationProvider *provider,
     return FALSE;
 
   tokens = g_strsplit (self->uri, "#", -1 );
+  g_clear_pointer (&self->uri, g_free);
+
   if (tokens == NULL || g_strv_length (tokens) != 2)
     return FALSE;
 
-  parse_succ = xml_parse (self, tokens[0], tokens[1], info);
-  g_free (self->uri);
-
-  return parse_succ;
+  return xml_parse (self, tokens[0], tokens[1], info);
 }
 
 void
@@ -243,7 +246,12 @@ gbp_devhelp_documentation_provider_get_info (IdeDocumentationProvider *provider,
   parse_succ = start_get_info (provider, info);
 
   if (parse_succ)
-    ide_documentation_info_take_proposal (info, self->proposal);
+    {
+      if (G_UNLIKELY (self->proposal == NULL))
+          return;
+
+      ide_documentation_info_take_proposal (info, g_steal_pointer (&self->proposal));
+    }
 }
 
 IdeDocumentationContext
@@ -267,10 +275,21 @@ gbp_devhelp_documentation_provider_constructed (GObject *object)
 }
 
 static void
+gbp_devhelp_documentation_provider_finalize (GObject *object)
+{
+  GbpDevhelpDocumentationProvider *self = (GbpDevhelpDocumentationProvider *)object;
+
+  g_clear_object (&self->keyword_model);
+
+  G_OBJECT_CLASS (gbp_devhelp_documentation_provider_parent_class)->finalize (object);
+}
+
+static void
 gbp_devhelp_documentation_provider_class_init (GbpDevhelpDocumentationProviderClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
+  object_class->finalize = gbp_devhelp_documentation_provider_finalize;
   object_class->constructed = gbp_devhelp_documentation_provider_constructed;
 
   regexes[START_HEADER] = g_regex_new (".*<pre.*?>", 0, 0, NULL);

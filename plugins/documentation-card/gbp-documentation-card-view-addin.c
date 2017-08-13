@@ -36,7 +36,7 @@ struct _GbpDocumentationCardViewAddin
   gchar                *previous_text;
 
   guint                 timeout_id;
-  gint                  motion_handler_id;
+  gulong                motion_handler_id;
   guint                 poped_up : 1;
   guint                 last_x, last_y;
 };
@@ -56,6 +56,14 @@ within_space (GbpDocumentationCardViewAddin *self,
       y <= self->last_y + SPACE_TOLERANCE &&
       y >= self->last_y - SPACE_TOLERANCE);
 }
+
+static gboolean
+unichar_issymbol (gunichar ch)
+{
+  return g_unichar_islower (ch) || g_unichar_isdigit (ch) || ch == '_';
+}
+
+
 static gboolean
 search_document_cb (gpointer data)
 {
@@ -78,6 +86,8 @@ search_document_cb (gpointer data)
   g_autofree gchar *selected_text = NULL;
   gint x, y;
 
+  self->timeout_id = 0;
+
   window = gtk_widget_get_parent_window (GTK_WIDGET (self->editor_view));
   display = gdk_window_get_display (window);
   device = gdk_seat_get_pointer (gdk_display_get_default_seat (display));
@@ -87,56 +97,55 @@ search_document_cb (gpointer data)
   if (self->poped_up)
     {
       if (within_space (self, x, y))
-        return FALSE;
+        return G_SOURCE_REMOVE;
       self->poped_up = FALSE;
       gbp_documentation_card_popdown (self->popover);
-      return FALSE;
+      return G_SOURCE_REMOVE;
     }
 
   self->last_x = x;
   self->last_y = y;
 
-  self->timeout_id = 0;
   source_view = ide_editor_view_get_view (self->editor_view);
   if (!GTK_SOURCE_IS_VIEW (source_view))
-    return FALSE;
+    return G_SOURCE_REMOVE;
 
   buffer = ide_editor_view_get_buffer (self->editor_view);
   if (buffer == NULL)
-    return FALSE;
+    return G_SOURCE_REMOVE;
 
   context = ide_buffer_get_context (buffer);
   doc =  ide_context_get_documentation (context);
 
   lang = gtk_source_buffer_get_language (GTK_SOURCE_BUFFER (buffer));
   if (lang == NULL)
-    return FALSE;
+    return G_SOURCE_REMOVE;
 
   if (ide_str_equal0 (gtk_source_language_get_id(lang), "c"))
     doc_context = IDE_DOCUMENTATION_CONTEXT_CARD_C;
   else
-    return FALSE;
+    return G_SOURCE_REMOVE;
 
   gtk_text_view_window_to_buffer_coords (GTK_TEXT_VIEW (source_view), GTK_TEXT_WINDOW_WIDGET, x, y, &x, &y);
   gtk_text_view_get_iter_at_location (GTK_TEXT_VIEW (source_view), &end, x, y);
   gtk_text_view_get_iter_at_location (GTK_TEXT_VIEW (source_view), &begin, x, y);
 
-  while (g_unichar_islower (gtk_text_iter_get_char (&begin)) || g_unichar_isdigit(gtk_text_iter_get_char (&begin)) || gtk_text_iter_get_char (&begin) == '_')
+  while (unichar_issymbol (gtk_text_iter_get_char (&begin)))
     if (!gtk_text_iter_backward_char (&begin))
       break;
   gtk_text_iter_forward_char (&begin);
 
-  while (g_unichar_islower (gtk_text_iter_get_char (&end)) || g_unichar_isdigit (gtk_text_iter_get_char (&end)) || gtk_text_iter_get_char (&end) == '_')
+  while (unichar_issymbol (gtk_text_iter_get_char (&end)))
     if (!gtk_text_iter_forward_char (&end))
       break;
 
-  selected_text = gtk_text_buffer_get_text (GTK_TEXT_BUFFER (buffer), &begin, &end, FALSE);
+  selected_text = gtk_text_iter_get_slice (&begin, &end);
 
   if (g_strcmp0 (selected_text, self->previous_text) != 0)
     {
       info = ide_documentation_get_info (doc, selected_text, doc_context);
       if (ide_documentation_info_get_size (info) == 0)
-        return FALSE;
+        return G_SOURCE_REMOVE;
 
       gbp_documentation_card_set_info (self->popover, info);
       g_free (self->previous_text);
@@ -146,7 +155,7 @@ search_document_cb (gpointer data)
   gbp_documentation_card_popup (self->popover);
   self->poped_up = TRUE;
 
-  return FALSE;
+  return G_SOURCE_REMOVE;
 }
 
 
@@ -166,7 +175,7 @@ motion_notify_event_cb (gpointer data)
                                                   g_object_ref (self),
                                                   g_object_unref);
   else
-    search_document_cb (g_object_ref (self));
+    search_document_cb (self);
 
   return FALSE;
 }
@@ -207,14 +216,14 @@ gbp_documentation_card_view_addin_unload (IdeEditorViewAddin *addin,
 
   self = GBP_DOCUMENTATION_CARD_VIEW_ADDIN (addin);
 
-  g_free (self->previous_text);
   ide_clear_source (&self->timeout_id);
+  ide_clear_signal_handler (self->editor_view, &self->motion_handler_id);
 
-  if (self->motion_handler_id)
-    {
-      g_signal_handler_disconnect (self->editor_view, self->motion_handler_id);
-      self->motion_handler_id = 0;
-    }
+  g_free (self->previous_text);
+  gtk_widget_destroy (GTK_WIDGET (self->popover));
+  self->popover = NULL;
+  self->editor_view = NULL;
+
 }
 
 static void

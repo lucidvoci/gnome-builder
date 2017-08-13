@@ -44,10 +44,8 @@ struct _GbpDocumentationCard
 G_DEFINE_TYPE (GbpDocumentationCard, gbp_documentation_card, GTK_TYPE_POPOVER)
 
 static gboolean
-card_popup (gpointer data)
+card_popup (GbpDocumentationCard *self)
 {
-  GbpDocumentationCard *self = GBP_DOCUMENTATION_CARD (data);
-
   GdkRectangle rec = {1, 1, 1, 1};
 
   gdk_window_get_device_position (self->window, self->pointer, &rec.x, &rec.y, NULL);
@@ -58,10 +56,8 @@ card_popup (gpointer data)
 }
 
 static gboolean
-card_popdown (gpointer data)
+card_popdown (GbpDocumentationCard *self)
 {
-  GbpDocumentationCard *self = GBP_DOCUMENTATION_CARD (data);
-
   gtk_popover_popdown (GTK_POPOVER (self));
   gtk_popover_set_modal (GTK_POPOVER (self), FALSE);
 
@@ -137,7 +133,7 @@ gbp_documentation_card_popup (GbpDocumentationCard *self)
   display = gdk_window_get_display (self->window);
   self->pointer = gdk_seat_get_pointer (gdk_display_get_default_seat (display));
 
-  card_popup (g_object_ref (self));
+  card_popup (self);
 }
 
 void
@@ -145,6 +141,6 @@ gbp_documentation_card_popdown (GbpDocumentationCard *self)
 {
   g_return_if_fail (GBP_IS_DOCUMENTATION_CARD (self));
 
-  card_popdown (g_object_ref (self));
+  card_popdown (self);
 }
 

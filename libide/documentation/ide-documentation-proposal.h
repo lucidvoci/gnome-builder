@@ -34,14 +34,14 @@ typedef struct _IdeDocumentationProposalClass IdeDocumentationProposalClass;
 
 G_DECLARE_DERIVABLE_TYPE (IdeDocumentationProposal, ide_documentation_proposal, IDE, DOCUMENTATION_PROPOSAL, GObject)
 
-IdeDocumentationProposal *ide_documentation_proposal_new            (gchar                      *url);
+IdeDocumentationProposal *ide_documentation_proposal_new            (const gchar                *url);
 void                      ide_documentation_proposal_set_header     (IdeDocumentationProposal   *self,
                                                                      const gchar                *header);
 void                      ide_documentation_proposal_set_text       (IdeDocumentationProposal   *self,
                                                                      const gchar                *text);
-gchar                    *ide_documentation_proposal_get_header     (IdeDocumentationProposal   *self);
-gchar                    *ide_documentation_proposal_get_text       (IdeDocumentationProposal   *self);
-gchar                    *ide_documentation_proposal_get_uri        (IdeDocumentationProposal   *self);
+const gchar              *ide_documentation_proposal_get_header     (IdeDocumentationProposal   *self);
+const gchar              *ide_documentation_proposal_get_text       (IdeDocumentationProposal   *self);
+const gchar              *ide_documentation_proposal_get_uri        (IdeDocumentationProposal   *self);
 
 
 G_END_DECLS

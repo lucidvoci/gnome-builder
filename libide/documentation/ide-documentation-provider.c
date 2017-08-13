@@ -47,7 +47,7 @@ ide_documentation_provider_get_name (IdeDocumentationProvider *provider)
 IdeDocumentationContext
 ide_documentation_provider_get_context (IdeDocumentationProvider *provider)
 {
-  g_return_val_if_fail (IDE_IS_DOCUMENTATION_PROVIDER (provider), IDE_DOCUMENTATION_CONTEXT_NON);
+  g_return_val_if_fail (IDE_IS_DOCUMENTATION_PROVIDER (provider), IDE_DOCUMENTATION_CONTEXT_NONE);
 
   return IDE_DOCUMENTATION_PROVIDER_GET_IFACE (provider)->get_context (provider);
 }

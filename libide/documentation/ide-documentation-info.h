@@ -25,22 +25,15 @@ G_BEGIN_DECLS
 
 #define IDE_TYPE_DOCUMENTATION_INFO (ide_documentation_info_get_type())
 
-G_DECLARE_DERIVABLE_TYPE (IdeDocumentationInfo, ide_documentation_info, IDE, DOCUMENTATION_INFO, GObject)
-
-struct _IdeDocumentationInfoClass
-{
-  GObjectClass parent_class;
-};
-
-typedef struct _IdeDocumentationInfoClass IdeDocumentationInfoClass;
+G_DECLARE_FINAL_TYPE (IdeDocumentationInfo, ide_documentation_info, IDE, DOCUMENTATION_INFO, GObject)
 
 typedef enum {
-  IDE_DOCUMENTATION_CONTEXT_NON,
+  IDE_DOCUMENTATION_CONTEXT_NONE,
   IDE_DOCUMENTATION_CONTEXT_CARD_C,
   IDE_DOCUMENTATION_CONTEXT_LAST,
 } IdeDocumentationContext;
 
-IdeDocumentationInfo     *ide_documentation_info_new            (gchar                       *input,
+IdeDocumentationInfo     *ide_documentation_info_new            (const gchar                 *input,
                                                                  IdeDocumentationContext      context);
 void                      ide_documentation_info_take_proposal  (IdeDocumentationInfo        *self,
                                                                  IdeDocumentationProposal    *proposal);

@@ -40,14 +40,14 @@ enum {
 static GParamSpec *properties [LAST_PROP];
 
 IdeDocumentationProposal *
-ide_documentation_proposal_new (gchar  *uri)
+ide_documentation_proposal_new (const gchar *uri)
 {
   return g_object_new (IDE_TYPE_DOCUMENTATION_PROPOSAL,
                        "uri", uri,
                        NULL);
 }
 
-gchar *
+const gchar *
 ide_documentation_proposal_get_header (IdeDocumentationProposal *self)
 {
   IdeDocumentationProposalPrivate *priv = ide_documentation_proposal_get_instance_private (self);
@@ -57,7 +57,7 @@ ide_documentation_proposal_get_header (IdeDocumentationProposal *self)
   return priv->header;
 }
 
-gchar *
+const gchar *
 ide_documentation_proposal_get_text (IdeDocumentationProposal *self)
 {
   IdeDocumentationProposalPrivate *priv = ide_documentation_proposal_get_instance_private (self);
@@ -67,7 +67,7 @@ ide_documentation_proposal_get_text (IdeDocumentationProposal *self)
   return priv->text;
 }
 
-gchar *
+const gchar *
 ide_documentation_proposal_get_uri (IdeDocumentationProposal *self)
 {
   IdeDocumentationProposalPrivate *priv = ide_documentation_proposal_get_instance_private (self);
@@ -86,7 +86,12 @@ ide_documentation_proposal_set_header (IdeDocumentationProposal *self,
 
   g_return_if_fail (IDE_IS_DOCUMENTATION_PROPOSAL (self));
 
-  priv->header = g_strdup (header);
+  if (g_strcmp0 (priv->header, header) != 0)
+    {
+      g_free (priv->header);
+      priv->header = g_strdup (header);
+      g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_HEADER]);
+    }
 }
 
 void
@@ -97,7 +102,12 @@ ide_documentation_proposal_set_text (IdeDocumentationProposal *self,
 
   g_return_if_fail (IDE_IS_DOCUMENTATION_PROPOSAL (self));
 
-  priv->text = g_strdup (text);
+    if (g_strcmp0 (priv->text, text) != 0)
+    {
+      g_free (priv->text);
+      priv->text = g_strdup (text);
+      g_object_notify_by_pspec (G_OBJECT (self), properties [PROP_TEXT]);
+    }
 }
 
 void
@@ -211,7 +221,7 @@ ide_documentation_proposal_class_init (IdeDocumentationProposalClass *klass)
   g_object_class_install_properties (object_class, LAST_PROP, properties);
 }
 
-static void
+void
 ide_documentation_proposal_init (IdeDocumentationProposal *self)
 {
   IdeDocumentationProposalPrivate *priv = ide_documentation_proposal_get_instance_private (self);

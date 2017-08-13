@@ -98,7 +98,7 @@ ide_documentation_init (IdeDocumentation *self)
  */
 IdeDocumentationInfo *
 ide_documentation_get_info    (IdeDocumentation        *self,
-                               gchar                   *input,
+                               const gchar             *input,
                                IdeDocumentationContext  context)
 {
   IdeDocumentationInfo *info;

@@ -21,14 +21,16 @@
 #include "ide-documentation-info.h"
 #include "ide-documentation-proposal.h"
 
-typedef struct
+struct _IdeDocumentationInfo
 {
+  GObject parent_instance;
+
   gchar                   *input;
   IdeDocumentationContext  context;
   GPtrArray               *proposals;
-} IdeDocumentationInfoPrivate;
+};
 
-G_DEFINE_TYPE_WITH_PRIVATE (IdeDocumentationInfo, ide_documentation_info, G_TYPE_OBJECT)
+G_DEFINE_TYPE (IdeDocumentationInfo, ide_documentation_info, G_TYPE_OBJECT)
 
 enum {
   PROP_0,
@@ -40,7 +42,7 @@ enum {
 static GParamSpec *properties [LAST_PROP];
 
 IdeDocumentationInfo *
-ide_documentation_info_new (gchar                  *input,
+ide_documentation_info_new (const gchar            *input,
                             IdeDocumentationContext context)
 {
 
@@ -54,12 +56,10 @@ void
 ide_documentation_info_take_proposal (IdeDocumentationInfo        *self,
                                       IdeDocumentationProposal    *proposal)
 {
-  IdeDocumentationInfoPrivate *priv = ide_documentation_info_get_instance_private (self);
-
   g_return_if_fail (IDE_IS_DOCUMENTATION_INFO (self));
   g_return_if_fail (IDE_IS_DOCUMENTATION_PROPOSAL (proposal));
 
-  g_ptr_array_add (priv->proposals, proposal);
+  g_ptr_array_add (self->proposals, proposal);
 }
 
 /**
@@ -69,30 +69,27 @@ ide_documentation_info_take_proposal (IdeDocumentationInfo        *self,
  *
  * Requests proposal for the index.
  *
- * Returns: (transfer full): An #IdeDocumentationProposal
+ * Returns: (transfer none): An #IdeDocumentationProposal
  */
 
 IdeDocumentationProposal *
 ide_documentation_info_get_proposal (IdeDocumentationInfo *self,
                                      guint                 index)
 {
-  IdeDocumentationInfoPrivate *priv = ide_documentation_info_get_instance_private (self);
-
   g_return_val_if_fail (IDE_IS_DOCUMENTATION_INFO (self), NULL);
-  g_return_val_if_fail (priv->proposals != NULL, NULL);
-  g_return_val_if_fail (priv->proposals->len > index, NULL);
+  g_return_val_if_fail (self->proposals != NULL, NULL);
+  g_return_val_if_fail (self->proposals->len > index, NULL);
 
-  return g_ptr_array_index (priv->proposals, index);
+  return g_ptr_array_index (self->proposals, index);
 }
 
 static void
 ide_documentation_info_finalize (GObject *object)
 {
   IdeDocumentationInfo *self = (IdeDocumentationInfo *)object;
-  IdeDocumentationInfoPrivate *priv = ide_documentation_info_get_instance_private (self);
 
-  g_clear_pointer (&priv->input, g_free);
-  g_clear_pointer (&priv->proposals, g_ptr_array_unref);
+  g_clear_pointer (&self->input, g_free);
+  g_clear_pointer (&self->proposals, g_ptr_array_unref);
 
   G_OBJECT_CLASS (ide_documentation_info_parent_class)->finalize (object);
 }
@@ -100,45 +97,45 @@ ide_documentation_info_finalize (GObject *object)
 gchar *
 ide_documentation_info_get_input (IdeDocumentationInfo *self)
 {
-  IdeDocumentationInfoPrivate *priv = ide_documentation_info_get_instance_private (self);
-
   g_return_val_if_fail (IDE_IS_DOCUMENTATION_INFO (self), NULL);
 
-  return priv->input;
+  return self->input;
 }
 
 IdeDocumentationContext
 ide_documentation_info_get_context (IdeDocumentationInfo *self)
 {
-  IdeDocumentationInfoPrivate *priv = ide_documentation_info_get_instance_private (self);
+  g_return_val_if_fail (IDE_IS_DOCUMENTATION_INFO (self), IDE_DOCUMENTATION_CONTEXT_NONE);
 
-  g_return_val_if_fail (IDE_IS_DOCUMENTATION_INFO (self), IDE_DOCUMENTATION_CONTEXT_NON);
+  return self->context;
+}
 
-  return priv->context;
+guint
+ide_documentation_info_get_size (IdeDocumentationInfo *self)
+{
+  g_return_val_if_fail (IDE_IS_DOCUMENTATION_INFO (self), 0);
+
+  return self->proposals != NULL ? self->proposals->len : 0;
 }
 
 static void
 ide_documentation_info_set_input (IdeDocumentationInfo *self,
                                   const gchar          *input)
 {
-  IdeDocumentationInfoPrivate *priv = ide_documentation_info_get_instance_private (self);
-
   g_return_if_fail (IDE_IS_DOCUMENTATION_INFO (self));
-  g_return_if_fail (priv->input == NULL);
+  g_return_if_fail (self->input == NULL);
 
-  priv->input = g_strdup (input);
+  self->input = g_strdup (input);
 }
 
 static void
 ide_documentation_info_set_context (IdeDocumentationInfo    *self,
                                     IdeDocumentationContext  context)
 {
-  IdeDocumentationInfoPrivate *priv = ide_documentation_info_get_instance_private (self);
-
   g_return_if_fail (IDE_IS_DOCUMENTATION_INFO (self));
-  g_return_if_fail (priv->context == IDE_DOCUMENTATION_CONTEXT_NON);
+  g_return_if_fail (self->context == IDE_DOCUMENTATION_CONTEXT_NONE);
 
-  priv->context = context;
+  self->context = context;
 }
 
 static void
@@ -207,9 +204,9 @@ ide_documentation_info_class_init (IdeDocumentationInfoClass *klass)
     g_param_spec_int ("context",
                       "Context",
                       "Context",
-                      IDE_DOCUMENTATION_CONTEXT_NON,
+                      IDE_DOCUMENTATION_CONTEXT_NONE,
                       IDE_DOCUMENTATION_CONTEXT_LAST,
-                      IDE_DOCUMENTATION_CONTEXT_NON,
+                      IDE_DOCUMENTATION_CONTEXT_NONE,
                       (G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
 
   g_object_class_install_properties (object_class, LAST_PROP, properties);
@@ -218,19 +215,7 @@ ide_documentation_info_class_init (IdeDocumentationInfoClass *klass)
 static void
 ide_documentation_info_init (IdeDocumentationInfo *self)
 {
-  IdeDocumentationInfoPrivate *priv = ide_documentation_info_get_instance_private (self);
-
-  priv->proposals = g_ptr_array_new_with_free_func (g_object_unref);
-  priv->context = IDE_DOCUMENTATION_CONTEXT_NON;
-  priv->input = NULL;
-}
-
-guint
-ide_documentation_info_get_size (IdeDocumentationInfo *self)
-{
-  IdeDocumentationInfoPrivate *priv = ide_documentation_info_get_instance_private (self);
-
-  g_return_val_if_fail (IDE_IS_DOCUMENTATION_INFO (self), 0);
-
-  return priv->proposals != NULL ? priv->proposals->len : 0;
+  self->proposals = g_ptr_array_new_with_free_func (g_object_unref);
+  self->context = IDE_DOCUMENTATION_CONTEXT_NONE;
+  self->input = NULL;
 }
