@@ -1465,12 +1465,32 @@ ide_buffer_manager_set_property (GObject      *object,
 }
 
 static void
+ide_buffer_manager_constructed (GObject *obj)
+{
+  IdeBufferManager *self = IDE_BUFFER_MANAGER(obj);
+  IdeContext *context; 
+
+  g_return_if_fail (IDE_IS_BUFFER_MANAGER (self));
+
+  context = ide_object_get_context (IDE_OBJECT (self));
+
+  g_return_if_fail (IDE_IS_CONTEXT (context));
+
+  self->word_completion = g_object_new (IDE_TYPE_COMPLETION_WORDS,
+                                        "context", context,
+                                        NULL);
+
+  G_OBJECT_CLASS (ide_buffer_manager_parent_class)->constructed (obj);
+}
+
+static void
 ide_buffer_manager_class_init (IdeBufferManagerClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
   object_class->dispose = ide_buffer_manager_dispose;
   object_class->finalize = ide_buffer_manager_finalize;
+  object_class->constructed = ide_buffer_manager_constructed;
   object_class->get_property = ide_buffer_manager_get_property;
   object_class->set_property = ide_buffer_manager_set_property;
 
@@ -1672,7 +1692,6 @@ ide_buffer_manager_init (IdeBufferManager *self)
   self->buffers = g_ptr_array_new ();
   self->max_file_size = MAX_FILE_SIZE_BYTES_DEFAULT;
   self->timeouts = g_hash_table_new (g_direct_hash, g_direct_equal);
-  self->word_completion = g_object_new (IDE_TYPE_COMPLETION_WORDS, NULL);
   self->settings = g_settings_new ("org.gnome.builder.editor");
   self->loading = g_hash_table_new_full ((GHashFunc)ide_file_hash,
                                          (GEqualFunc)ide_file_equal,
