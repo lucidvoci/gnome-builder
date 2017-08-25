@@ -43,30 +43,6 @@ struct _GbpDocumentationCard
 
 G_DEFINE_TYPE (GbpDocumentationCard, gbp_documentation_card, GTK_TYPE_POPOVER)
 
-static gboolean
-card_popup (GbpDocumentationCard *self)
-{
-  GdkRectangle rec = {1, 1, 1, 1};
-
-  gdk_window_get_device_position (self->window, self->pointer, &rec.x, &rec.y, NULL);
-  gtk_popover_set_pointing_to (GTK_POPOVER (self), &rec);
-  gtk_popover_popup (GTK_POPOVER (self));
-
-  return FALSE;
-}
-
-static gboolean
-card_popdown (GbpDocumentationCard *self)
-{
-  gtk_popover_popdown (GTK_POPOVER (self));
-  gtk_popover_set_modal (GTK_POPOVER (self), FALSE);
-
-  gtk_widget_set_visible (GTK_WIDGET (self->text), FALSE);
-  gtk_widget_set_visible (GTK_WIDGET (self->button), TRUE);
-
-  return FALSE;
-}
-
 static void
 gbp_documentation_card__button_clicked (GbpDocumentationCard *self,
                                         GtkButton            *button)
@@ -80,6 +56,16 @@ gbp_documentation_card__button_clicked (GbpDocumentationCard *self,
   gtk_popover_set_modal (GTK_POPOVER (self), TRUE);
   gtk_label_set_width_chars (self->text, CARD_WIDTH);
 
+}
+
+void
+gbp_documentation_card__closed (gpointer    user_data,
+                                GbpDocumentationCard  *self)
+{
+  gtk_popover_set_modal (GTK_POPOVER (self), FALSE);
+
+  gtk_widget_set_visible (GTK_WIDGET (self->text), FALSE);
+  gtk_widget_set_visible (GTK_WIDGET (self->button), TRUE);
 }
 
 static void
@@ -105,6 +91,12 @@ gbp_documentation_card_init (GbpDocumentationCard *self)
                            G_CALLBACK (gbp_documentation_card__button_clicked),
                            self,
                            G_CONNECT_SWAPPED);
+
+  g_signal_connect_object (self,
+                           "closed",
+                           G_CALLBACK (gbp_documentation_card__closed),
+                           NULL,
+                           G_CONNECT_SWAPPED);
 }
 
 void
@@ -123,24 +115,23 @@ gbp_documentation_card_set_info (GbpDocumentationCard *self,
 }
 
 void
-gbp_documentation_card_popup (GbpDocumentationCard *self)
+gbp_documentation_card_popup (GbpDocumentationCard *self,
+                              gint x,
+                              gint y)
 {
-  GdkDisplay *display;
+  GdkRectangle rec;
 
   g_return_if_fail (GBP_IS_DOCUMENTATION_CARD (self));
 
-  self->window = gtk_widget_get_parent_window (gtk_popover_get_relative_to (GTK_POPOVER (self)));
-  display = gdk_window_get_display (self->window);
-  self->pointer = gdk_seat_get_pointer (gdk_display_get_default_seat (display));
+  if (x < 0 || y < 0)
+    return;
 
-  card_popup (self);
-}
+  rec.x = x;
+  rec.y = y;
+  rec.width = 1;
+  rec.height = 1;
 
-void
-gbp_documentation_card_popdown (GbpDocumentationCard *self)
-{
-  g_return_if_fail (GBP_IS_DOCUMENTATION_CARD (self));
-
-  card_popdown (self);
+  gtk_popover_set_pointing_to (GTK_POPOVER (self), &rec);
+  gtk_popover_popup (GTK_POPOVER (self));
 }
 
