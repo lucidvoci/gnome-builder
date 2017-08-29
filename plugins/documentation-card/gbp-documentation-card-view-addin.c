@@ -147,13 +147,17 @@ search_document_cb (gpointer data)
 
   self->timeout_id = 0;
 
-  window = gtk_widget_get_parent_window (GTK_WIDGET (self->editor_view));
-  if (!GDK_IS_WINDOW (window))
-    return G_SOURCE_REMOVE;
-
-
-  display = gdk_window_get_display (window);
-  device = gdk_seat_get_pointer (gdk_display_get_default_seat (display));
+  /* Be defensive against widget destruction */
+  if (self->editor_view == NULL ||
+      NULL == (window = gtk_widget_get_parent_window (GTK_WIDGET (self->editor_view))) ||
+      NULL == (display = gdk_window_get_display (window)) ||
+      NULL == (device = gdk_seat_get_pointer (gdk_display_get_default_seat (display))))
+    {
+      if (self->poped_up)
+        self->poped_up = FALSE;
+      gbp_popover_popdown (GTK_POPOVER (self->popover));
+      return G_SOURCE_REMOVE;
+    }
 
   gdk_window_get_device_position (window, device, &x, &y, NULL);
 
@@ -259,6 +263,11 @@ gbp_documentation_card_view_addin_load (IdeEditorViewAddin *addin,
                                 "position", GTK_POS_TOP,
                                 "modal", FALSE,
                                  NULL);
+  g_signal_connect (self->popover,
+                    "destroy",
+                    G_CALLBACK (gtk_widget_destroyed),
+                    &self->popover);
+
   self->motion_handler_id =
     g_signal_connect_object (view,
                             "motion-notify-event",
@@ -271,8 +280,6 @@ gbp_documentation_card_view_addin_load (IdeEditorViewAddin *addin,
                            G_CALLBACK (documentation_requested_cb),
                            addin,
                            G_CONNECT_SWAPPED);
-
-
 }
 
 static void
@@ -300,7 +307,6 @@ gbp_documentation_card_view_addin_unload (IdeEditorViewAddin *addin,
     g_signal_handlers_disconnect_by_func (source_view,
                                           G_CALLBACK (documentation_requested_cb),
                                           addin);
-
 }
 
 static void

@@ -28,6 +28,8 @@
 #include "gb-terminal-view.h"
 #include "gb-terminal-workbench-addin.h"
 
+#define I_(s) g_intern_static_string(s)
+
 struct _GbTerminalWorkbenchAddin
 {
   GObject         parent_instance;
@@ -139,6 +141,7 @@ on_run_manager_run (GbTerminalWorkbenchAddin *self,
       panel = g_object_new (DZL_TYPE_DOCK_WIDGET,
                             "child", self->run_terminal,
                             "expand", TRUE,
+                            "icon-name", "system-run-symbolic",
                             "title", _("Application Output"),
                             "visible", TRUE,
                             NULL);
@@ -147,7 +150,7 @@ on_run_manager_run (GbTerminalWorkbenchAddin *self,
       perspective = ide_workbench_get_perspective_by_name (self->workbench, "editor");
       g_assert (IDE_IS_EDITOR_PERSPECTIVE (perspective));
 
-      bottom_pane = ide_editor_perspective_get_bottom_edge (IDE_EDITOR_PERSPECTIVE (perspective));
+      bottom_pane = ide_editor_perspective_get_utilities (IDE_EDITOR_PERSPECTIVE (perspective));
       gtk_container_add (GTK_CONTAINER (bottom_pane), GTK_WIDGET (self->run_panel));
     }
   else
@@ -172,6 +175,49 @@ failure:
   IDE_EXIT;
 }
 
+static const DzlShortcutEntry gb_terminal_shortcut_entries[] = {
+  { "org.gnome.builder.workbench.new-terminal",
+    0, NULL,
+    NC_("shortcut window", "Workbench shortcuts"),
+    NC_("shortcut window", "General"),
+    NC_("shortcut window", "Terminal") },
+
+  { "org.gnome.builder.workbench.new-terminal-in-runtime",
+    0, NULL,
+    NC_("shortcut window", "Workbench shortcuts"),
+    NC_("shortcut window", "General"),
+    NC_("shortcut window", "Terminal in Build Runtime") },
+};
+
+static void
+gb_terminal_workbench_setup_shortcuts (GbTerminalWorkbenchAddin *self,
+                                       IdeWorkbench             *workbench)
+{
+  DzlShortcutController *controller;
+
+  g_assert (GB_IS_TERMINAL_WORKBENCH_ADDIN (self));
+  g_assert (IDE_IS_WORKBENCH (workbench));
+
+  controller = dzl_shortcut_controller_find (GTK_WIDGET (workbench));
+
+  dzl_shortcut_controller_add_command_action (controller,
+                                              "org.gnome.builder.workbench.new-terminal",
+                                              I_("<primary><shift>t"),
+                                              DZL_SHORTCUT_PHASE_DISPATCH,
+                                              "win.new-terminal");
+
+  dzl_shortcut_controller_add_command_action (controller,
+                                              "org.gnome.builder.workbench.new-terminal-in-runtime",
+                                              I_("<primary><alt><shift>t"),
+                                              DZL_SHORTCUT_PHASE_DISPATCH,
+                                              "win.new-terminal-in-runtime");
+
+  dzl_shortcut_manager_add_shortcut_entries (NULL,
+                                             gb_terminal_shortcut_entries,
+                                             G_N_ELEMENTS (gb_terminal_shortcut_entries),
+                                             GETTEXT_PACKAGE);
+}
+
 static void
 gb_terminal_workbench_addin_load (IdeWorkbenchAddin *addin,
                                   IdeWorkbench      *workbench)
@@ -194,11 +240,13 @@ gb_terminal_workbench_addin_load (IdeWorkbenchAddin *addin,
   ide_set_weak_pointer (&self->workbench, workbench);
 
   g_action_map_add_action_entries (G_ACTION_MAP (workbench), actions, G_N_ELEMENTS (actions), self);
+  gb_terminal_workbench_setup_shortcuts (self, workbench);
 
   if (self->panel_terminal == NULL)
     {
       self->panel_dock_widget = g_object_new (DZL_TYPE_DOCK_WIDGET,
                                               "expand", TRUE,
+                                              "icon-name", "utilities-terminal-symbolic",
                                               "title", _("Terminal"),
                                               "visible", TRUE,
                                               NULL);
@@ -217,7 +265,7 @@ gb_terminal_workbench_addin_load (IdeWorkbenchAddin *addin,
   perspective = ide_workbench_get_perspective_by_name (workbench, "editor");
   g_assert (IDE_IS_EDITOR_PERSPECTIVE (perspective));
 
-  bottom_pane = ide_editor_perspective_get_bottom_edge (IDE_EDITOR_PERSPECTIVE (perspective));
+  bottom_pane = ide_editor_perspective_get_utilities (IDE_EDITOR_PERSPECTIVE (perspective));
   gtk_container_add (GTK_CONTAINER (bottom_pane), GTK_WIDGET (self->panel_dock_widget));
 
   run_manager = ide_context_get_run_manager (context);

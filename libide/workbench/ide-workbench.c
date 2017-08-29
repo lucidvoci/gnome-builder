@@ -469,11 +469,6 @@ ide_workbench_init (IdeWorkbench *self)
 
   window_group = gtk_window_group_new ();
   gtk_window_group_add_window (window_group, GTK_WINDOW (self));
-
-  g_signal_connect_swapped (self,
-                            "key-press-event",
-                            G_CALLBACK (dzl_shortcut_manager_handle_event),
-                            dzl_shortcut_manager_get_default ());
 }
 
 static void
@@ -709,7 +704,6 @@ void
 ide_workbench_add_perspective (IdeWorkbench   *self,
                                IdePerspective *perspective)
 {
-  g_autofree gchar *accel= NULL;
   g_autofree gchar *icon_name = NULL;
   g_autofree gchar *id = NULL;
   g_autofree gchar *title = NULL;
@@ -736,18 +730,7 @@ ide_workbench_add_perspective (IdeWorkbench   *self,
                                        "name", id,
                                        NULL);
 
-  accel = ide_perspective_get_accelerator (perspective);
-
-  if (accel != NULL)
-    {
-      const gchar *accel_map[] = { accel, NULL };
-      g_autofree gchar *action_name = NULL;
-
-      action_name = g_strdup_printf ("win.perspective('%s')", id);
-      gtk_application_set_accels_for_action (GTK_APPLICATION (IDE_APPLICATION_DEFAULT),
-                                             action_name, accel_map);
-
-    }
+  _ide_workbench_add_perspective_shortcut (self, perspective);
 }
 
 void

@@ -1,6 +1,6 @@
-/* gb-terminal-application-addin.h
+/* ide-editor-utilities.h
  *
- * Copyright (C) 2015 Christian Hergert <christian@hergert.me>
+ * Copyright (C) 2017 Christian Hergert <chergert@redhat.com>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,17 +16,16 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef GB_TERMINAL_APPLICATION_ADDIN_H
-#define GB_TERMINAL_APPLICATION_ADDIN_H
+#pragma once
 
-#include <ide.h>
+#include "layout/ide-layout-pane.h"
 
 G_BEGIN_DECLS
 
-#define GB_TYPE_TERMINAL_APPLICATION_ADDIN (gb_terminal_application_addin_get_type())
+#define IDE_TYPE_EDITOR_UTILITIES (ide_editor_utilities_get_type())
 
-G_DECLARE_FINAL_TYPE (GbTerminalApplicationAddin, gb_terminal_application_addin, GB, TERMINAL_APPLICATION_ADDIN, GObject)
+G_DECLARE_FINAL_TYPE (IdeEditorUtilities, ide_editor_utilities, IDE, EDITOR_UTILITIES, IdeLayoutPane)
+
+/* Use GtkContainer api to add your DzlDockWidget */
 
 G_END_DECLS
-
-#endif /* GB_TERMINAL_APPLICATION_ADDIN_H */

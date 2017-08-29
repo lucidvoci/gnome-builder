@@ -10,8 +10,6 @@ terminal_sources = [
   terminal_resources,
   'gb-terminal.c',
   'gb-terminal.h',
-  'gb-terminal-application-addin.c',
-  'gb-terminal-application-addin.h',
   'gb-terminal-plugin.c',
   'gb-terminal-private.h',
   'gb-terminal-util.c',
@@ -39,6 +37,7 @@ shared_module('terminal', terminal_sources,
   link_depends: plugin_link_deps,
   install: true,
   install_dir: plugindir,
+  install_rpath: pkglibdir_abs,
 )
 
 configure_file(

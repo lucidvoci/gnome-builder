@@ -293,6 +293,27 @@ unset_primary_color:
   ide_layout_view_set_primary_color_fg (IDE_LAYOUT_VIEW (self), NULL);
 }
 
+static void
+ide_editor_view__buffer_notify_changed_on_volume (IdeEditorView *self,
+                                                  GParamSpec    *pspec,
+                                                  IdeBuffer     *buffer)
+{
+  g_assert (IDE_IS_EDITOR_VIEW (self));
+  g_assert (IDE_IS_BUFFER (buffer));
+
+  gtk_revealer_set_reveal_child (self->modified_revealer,
+                                 ide_buffer_get_changed_on_volume (buffer));
+}
+
+static void
+ide_editor_view_hide_reload_bar (IdeEditorView *self,
+                                 GtkWidget     *button)
+{
+  g_assert (IDE_IS_EDITOR_VIEW (self));
+
+  gtk_revealer_set_reveal_child (self->modified_revealer, FALSE);
+}
+
 static gboolean
 ide_editor_view_source_view_event (IdeEditorView *self,
                                    GdkEvent      *event,
@@ -361,13 +382,14 @@ ide_editor_view_addin_added (IdeExtensionSetAdapter *set,
                              gpointer                user_data)
 {
   IdeEditorView *self = user_data;
+  IdeEditorViewAddin *addin = (IdeEditorViewAddin *)exten;
 
   g_assert (IDE_IS_EXTENSION_SET_ADAPTER (set));
   g_assert (plugin_info != NULL);
-  g_assert (IDE_IS_EDITOR_VIEW_ADDIN (exten));
+  g_assert (IDE_IS_EDITOR_VIEW_ADDIN (addin));
   g_assert (IDE_IS_EDITOR_VIEW (self));
 
-  ide_editor_view_addin_load (IDE_EDITOR_VIEW_ADDIN (exten), self);
+  ide_editor_view_addin_load (addin, self);
 }
 
 static void
@@ -377,13 +399,14 @@ ide_editor_view_addin_removed (IdeExtensionSetAdapter *set,
                                gpointer                user_data)
 {
   IdeEditorView *self = user_data;
+  IdeEditorViewAddin *addin = (IdeEditorViewAddin *)exten;
 
   g_assert (IDE_IS_EXTENSION_SET_ADAPTER (set));
   g_assert (plugin_info != NULL);
-  g_assert (IDE_IS_EDITOR_VIEW_ADDIN (exten));
+  g_assert (IDE_IS_EDITOR_VIEW_ADDIN (addin));
   g_assert (IDE_IS_EDITOR_VIEW (self));
 
-  ide_editor_view_addin_unload (IDE_EDITOR_VIEW_ADDIN (exten), self);
+  ide_editor_view_addin_unload (addin, self);
 }
 
 static void
@@ -523,6 +546,24 @@ search_revealer_notify_reveal_child (IdeEditorView *self,
 }
 
 static void
+ide_editor_view_focus_location (IdeEditorView     *self,
+                                IdeSourceLocation *location,
+                                IdeSourceView     *source_view)
+{
+  IdeWorkbench *workbench;
+  IdePerspective *editor;
+
+  g_assert (IDE_IS_EDITOR_VIEW (self));
+  g_assert (location != NULL);
+  g_assert (IDE_IS_SOURCE_VIEW (source_view));
+
+  workbench = ide_widget_get_workbench (GTK_WIDGET (self));
+  editor = ide_workbench_get_perspective_by_name (workbench, "editor");
+
+  ide_editor_perspective_focus_location (IDE_EDITOR_PERSPECTIVE (editor), location);
+}
+
+static void
 ide_editor_view_constructed (GObject *object)
 {
   IdeEditorView *self = (IdeEditorView *)object;
@@ -565,10 +606,17 @@ ide_editor_view_constructed (GObject *object)
                             G_CALLBACK (ide_editor_view_source_view_event),
                             self);
 
+  g_signal_connect_swapped (self->source_view,
+                            "focus-location",
+                            G_CALLBACK (ide_editor_view_focus_location),
+                            self);
+
   g_signal_connect_swapped (self->map,
                             "motion-notify-event",
                             G_CALLBACK (ide_editor_view_source_view_event),
                             self);
+
+
 
   /*
    * We want to track when the search revealer is visible. We will discard
@@ -595,9 +643,9 @@ ide_editor_view_destroy (GtkWidget *widget)
 
   ide_clear_source (&self->toggle_map_source);
 
-  gtk_widget_insert_action_group (widget, "editor-view", NULL);
-
   g_clear_object (&self->addins);
+
+  gtk_widget_insert_action_group (widget, "editor-view", NULL);
 
   g_cancellable_cancel (self->destroy_cancellable);
   g_clear_object (&self->destroy_cancellable);
@@ -746,6 +794,8 @@ ide_editor_view_class_init (IdeEditorViewClass *klass)
   gtk_widget_class_bind_template_child (widget_class, IdeEditorView, scroller_box);
   gtk_widget_class_bind_template_child (widget_class, IdeEditorView, search_bar);
   gtk_widget_class_bind_template_child (widget_class, IdeEditorView, search_revealer);
+  gtk_widget_class_bind_template_child (widget_class, IdeEditorView, modified_revealer);
+  gtk_widget_class_bind_template_child (widget_class, IdeEditorView, modified_cancel_button);
   gtk_widget_class_bind_template_child (widget_class, IdeEditorView, source_view);
   gtk_widget_class_bind_template_callback (widget_class, ide_editor_view_notify_child_revealed);
   gtk_widget_class_bind_template_callback (widget_class, ide_editor_view_stop_search);
@@ -790,11 +840,21 @@ ide_editor_view_init (IdeEditorView *self)
                                     "notify::style-scheme",
                                     G_CALLBACK (ide_editor_view_buffer_notify_style_scheme),
                                     self);
+  dzl_signal_group_connect_swapped (self->buffer_signals,
+                                    "notify::changed-on-volume",
+                                    G_CALLBACK (ide_editor_view__buffer_notify_changed_on_volume),
+                                    self);
 
   g_signal_connect_swapped (self->buffer_signals,
                             "bind",
                             G_CALLBACK (ide_editor_view_bind_signals),
                             self);
+
+  g_signal_connect_object (self->modified_cancel_button,
+                           "clicked",
+                           G_CALLBACK (ide_editor_view_hide_reload_bar),
+                           self,
+                           G_CONNECT_SWAPPED);
 
   /*
    * Setup our search context. The sourceview has it's own search
