@@ -155,7 +155,7 @@ search_document_cb (gpointer data)
     {
       if (self->poped_up)
         self->poped_up = FALSE;
-      gbp_popover_popdown (GTK_POPOVER (self->popover));
+      gtk_popover_popdown (GTK_POPOVER (self->popover));
       return G_SOURCE_REMOVE;
     }
 
